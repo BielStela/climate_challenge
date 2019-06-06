@@ -103,5 +103,6 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-#for now ignore data
+#ignore files of Juan
 data/
+exploration/
