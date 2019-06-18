@@ -104,7 +104,7 @@ venv.bak/
 .mypy_cache/
 
 #files for juan
-climateChallengeData
+climateChallengeData/
 
 #ignore files of Juan
 data/
