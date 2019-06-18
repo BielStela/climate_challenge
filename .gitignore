@@ -103,6 +103,9 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+#files for juan
+climateChallengeData
+
 #ignore files of Juan
 data/
 exploration/
