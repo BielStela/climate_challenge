@@ -40,24 +40,25 @@ class DataFrameSelector(BaseEstimator, TransformerMixin):
     def transform(self, X):
         return X[self.attribute_names]
     
-#
-#class official_station_daily_adder(BaseEstimator, TransformerMixin):
-#    
-#    """
-#    Class for adding attributes from official stations to the values predicted 
-#    from the model (real values). The data is the joint for the moment
-#    """
-#    
-#    def __init__(self, attributes_to_add):
-#        self.attributes_to_add = attributes_to_add
-#
-#    def fit(self, X, y=None):
-#        return self
-#    
-#    def transform(self,X, y):
-#        for index, row in X.iterrows():
-#            date = pd.to_datetime(row['day'], format='%Y-%m-%d')
-#            y[y['DATA'] == date]
+
+class official_station_daily_adder(BaseEstimator, TransformerMixin):
+    
+    """
+    Class for adding attributes from official stations to the values predicted 
+    from the model (real values). The data is the joint for the moment
+    """
+    
+    def __init__(self, attributes_to_add, station_locations):
+        self.station_locations = station_locations
+        self.attributes_to_add = attributes_to_add
+
+    def fit(self, X, y=None):
+        return self
+    
+    def transform(self,X, y):
+        for index, row in X.iterrows():
+            date = pd.to_datetime(row['day'], format='%Y-%m-%d')
+            y[y['DATA'] == date]
 
 def read_real_files(direc="./climateChallengeData/real"):
     """
@@ -136,7 +137,7 @@ if __name__ == "__main__":
     """
     
     """
-    print(official_station_daily[1])
+    print(official_stations_daily[1])
     
     #TODO:
     # make class or fucntion to add official stations values to real values
