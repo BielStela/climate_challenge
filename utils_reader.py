@@ -19,9 +19,10 @@ import pandas as pd
 import urllib.request as req
 from zipfile import ZipFile
 from io import BytesIO
-from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
 import numpy as np
+import geopy.distance as distance
+from tqdm import tqdm as tqdm
 
 np.random.seed(42)
 test_size = 0.2
@@ -49,21 +50,43 @@ class official_station_daily_adder(BaseEstimator, TransformerMixin):
     from the model (real values). The data is the joint for the moment
     """
 
-    def __init__(self, attributes_to_add):
-        # self.station_locations = station_locations
+    def __init__(self, attributes_to_add, station_locations,
+                 include_distance=True):
+        self.station_locations = station_locations
         self.attributes_to_add = attributes_to_add
+        self.include_distance = include_distance
 
     def fit(self, X, y=None):
         return self
 
     def transform(self, X, y):
         X['day'] = pd.to_datetime(X['day'])
-        full = X.copy()
+        self.full = X.copy()
         for i, j in zip(self.attributes_to_add,
                         range(len(self.attributes_to_add))):
-            full = pd.merge(full, y[j][i], how='inner', left_on='day',
-                            right_on='DATA')
-        return full
+            self.full = pd.merge(self.full, y[j][i], how='inner',
+                                 left_on='day', right_on='DATA',
+                                 suffixes=("_" + str(j-1), "_" + str(j)))
+
+        if self.include_distance:
+            for j in tqdm(range(len(self.attributes_to_add))):
+                self.add_distance(j)
+
+        return self.full
+
+    def add_distance(self, index):
+        lat = self.station_locations[
+                self.station_locations['Station'] == np.unique(
+                        self.full['ESTACIO_' + str(index)])[0]][
+                        'Latitude'].values
+        long = self.station_locations[
+                self.station_locations['Station'] == np.unique(
+                        self.full['ESTACIO_' + str(index)])[0]][
+                        'Longitude'].values
+
+        self.full['DIST_' + str(index)] = self.full.apply(
+                lambda x: distance.geodesic(
+                        (x['LAT'], x['LON']), (lat, long)).km, axis=1)
 
 
 def read_real_files(direc="./climateChallengeData/real"):
@@ -133,6 +156,7 @@ if __name__ == "__main__":
     download_files()
     full_real = read_real_files()
     official_stations_daily = read_official_stations()
+    official_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
 
     y_columns = ['T_MEAN']
     x_columns = ['day', 'LAT', 'LON']
@@ -144,10 +168,14 @@ if __name__ == "__main__":
                                                         test_size=test_size,
                                                         shuffle=True)
 
-    official_attr = [['DATA', 'Tm', 'Tx', 'Tn'],
-                     ['DATA', 'Tm', 'Tx', 'Tn'],
-                     ['DATA', 'Tm', 'Tx', 'Tn'],
-                     ['DATA', 'Tm', 'Tx', 'Tn']]
-    X_train_complete = official_station_daily_adder(official_attr).transform(
+    official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
+                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
+                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
+                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO']]
+
+    X_train_complete = official_station_daily_adder(
+            official_attr,
+            official_stations_latlon).transform(
             X_train, official_stations_daily)
+
     print(X_train_complete.head(20))
