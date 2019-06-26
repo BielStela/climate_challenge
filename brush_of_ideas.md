@@ -23,3 +23,9 @@
         + Linear regression
         + ...
     + Crossval
+
+# OnGoing
+
++ Juan
+	+ I have begin implementing a data pipeline. My idea is to have a common ground for data pipelining. The file is called utils reader. By the moment it only includes a downloader and 
+	a dataframe grouper. Feel free to modify it.
