@@ -175,7 +175,7 @@ if __name__ == "__main__":
 
     X_train_complete = official_station_daily_adder(
             official_attr,
-            official_stations_latlon).transform(
+            official_stations_latlon, include_distance=False).transform(
             X_train, official_stations_daily)
 
     print(X_train_complete.head(20))
