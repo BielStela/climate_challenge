@@ -24,8 +24,15 @@
         + ...
     + Crossval
 
-# OnGoing
+# Ongoing
 
 + Juan
-	+ I have begin implementing a data pipeline. My idea is to have a common ground for data pipelining. The file is called utils reader. By the moment it only includes a downloader and 
-	a dataframe grouper. Feel free to modify it.
+	+ Full pipeline of features + models wcikit way
++ Biel
+	+ Geographic features for each cell: green level, altitude, ...
+
+# Ideas
+	
++ Map as an image
+	+ Maybe like sparse matrices?
++ RNN for consecutive days
