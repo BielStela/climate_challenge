@@ -35,4 +35,9 @@
 	
 + Map as an image
 	+ Maybe like sparse matrices?
+	+ Deconv Networks
+	+ Taking polygons with places without information: when computing loss only taking 
+	+ https://www.mdpi.com/2072-4292/11/5/597/pdf
++ ANN: multilayer perceptron
+	+ https://pdfs.semanticscholar.org/53e4/884eafff5082d26495125dc654c4efb4915a.pdf
 + RNN for consecutive days
