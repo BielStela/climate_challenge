@@ -28,8 +28,11 @@
 
 + Juan
 	+ Full pipeline of features + models wcikit way
+	+ Include features from hourly data
 + Biel
 	+ Geographic features for each cell: green level, altitude, ...
+
+
 
 # Ideas
 	
@@ -40,4 +43,5 @@
 	+ https://www.mdpi.com/2072-4292/11/5/597/pdf
 + ANN: multilayer perceptron
 	+ https://pdfs.semanticscholar.org/53e4/884eafff5082d26495125dc654c4efb4915a.pdf
+	+ http://www.diva-portal.org/smash/get/diva2:1204647/FULLTEXT02
 + RNN for consecutive days
