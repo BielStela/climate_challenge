@@ -28,11 +28,14 @@
 
 + Juan
 	+ Full pipeline of features + models wcikit way
-	+ Include features from hourly data
+	
 + Biel
 	+ Geographic features for each cell: green level, altitude, ...
 
-
++ NEXT STEPS:
+	+ Include features from hourly data
+	+ Include features from non official
+	
 
 # Ideas
 	
