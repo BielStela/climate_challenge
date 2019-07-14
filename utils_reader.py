@@ -213,8 +213,12 @@ if __name__ == "__main__":
 
     X_train_complete = official_station_daily_adder(
             official_attr,
+<<<<<<< HEAD
             official_stations_latlon,
             include_distance=False).transform(
+=======
+            official_stations_latlon, include_distance=False).transform(
+>>>>>>> f5240f007b47e35bbd67f784eaa48a7073e3c1e8
             X_train, official_stations_daily)
 
     print(X_train_complete.head(20))
