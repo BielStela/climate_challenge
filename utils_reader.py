@@ -59,44 +59,36 @@ class official_station_daily_adder(BaseEstimator, TransformerMixin):
     from the model (real values). The data is the joint for the moment
     """
 
-    def __init__(self, attributes_to_add, station_locations,
-                 include_distance=True):
-        self.station_locations = station_locations
+    def __init__(self, attributes_to_add,
+                 include_distance=True, distances=None):
         self.attributes_to_add = attributes_to_add
         self.include_distance = include_distance
+
+        if self.include_distance:
+            self.distances = distances
 
     def fit(self, X, y=None):
         return self
 
     def transform(self, X, y):
-        X['day'] = pd.to_datetime(X['day'])
+        # to_datetime functions is super slow if format is not supplied
+        X['day'] = pd.to_datetime(X['day'], infer_datetime_format=True)
         self.full = X.copy()
-        for i, j in tqdm(
-                zip(self.attributes_to_add, range(len(self.attributes_to_add))), 
-                total=len(self.attributes_to_add)):
-            self.full = pd.merge(self.full, y[j][i], how='inner',
-                                 left_on='day', right_on='DATA',
-                                 suffixes=("_" + str(j-1), "_" + str(j)))
+
+        for i, j in tqdm(zip(self.attributes_to_add,
+                             range(len(self.attributes_to_add))),
+                         total=len(self.attributes_to_add)):
+            self.full = self.full.merge(y[j][i], how='inner',
+                                        left_on='day', right_on='DATA',
+                                        suffixes=("_" + str(j-1), "_" +
+                                                  str(j)))
 
         if self.include_distance:
-            for j in tqdm(range(len(self.attributes_to_add))):
-                self.add_distance(j)
+            create_idx(self.full)
+            self.full = self.full.merge(self.distances, how='inner',
+                                        left_on='idx', right_on='idx')
 
         return self.full
-
-    def add_distance(self, index):
-        lat = self.station_locations[
-                self.station_locations['Station'] == np.unique(
-                        self.full['ESTACIO_' + str(index)])[0]][
-                        'Latitude'].values
-        long = self.station_locations[
-                self.station_locations['Station'] == np.unique(
-                        self.full['ESTACIO_' + str(index)])[0]][
-                        'Longitude'].values
-
-        self.full['DIST_' + str(index)] = self.full.apply(
-                lambda x: distance.geodesic(
-                        (x['LAT'], x['LON']), (lat, long)).km, axis=1)
 
 
 def read_real_files(direc="./climateChallengeData/real"):
@@ -104,6 +96,18 @@ def read_real_files(direc="./climateChallengeData/real"):
     Takes the files in the folder real and groups them in a sole pandas
     THis dataframe will be the base for adding more features and make the
     training val and test division
+
+    args
+    -----
+    direc (numeric):
+        where the files are located
+
+    returns
+    ------
+
+    full_file (dataframe):
+        dataframe with all the years and each day withe corresponding
+        data
     """
     files = []
     for i in listdir(direc):
@@ -127,11 +131,14 @@ def compute_distances(latLonStations, gridPoints,
                         (latLonStations.loc[i, 'Latitude'],
                          latLonStations.loc[i, 'Longitude'])).km,
                 axis=1)
+    create_idx(gridPoints)
+    gridPoints.drop(columns=['nx', 'ny', 'LAT', 'LON'], inplace=True)
     gridPoints.to_csv(file_name)
 
 
 def create_idx(df):
-    df['nxny'] = df.apply(lambda x: str(int(x['nx'])).strip() + str(int(x['ny'])).strip(), axis=1)
+    df['idx'] = df.apply(lambda x: str(int(x['nx'])).strip() +
+                         str(int(x['ny'])).strip(), axis=1)
 
 
 def download_files(direc="./climateChallengeData/"):
@@ -189,36 +196,25 @@ if __name__ == "__main__":
     official_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
     grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
 
+    compute_distances(official_stations_latlon, grid_points)
+    create_idx(full_real)
+
     y_columns = ['T_MEAN']
-    x_columns = ['day', 'ny', 'nx']
+    x_columns = ['day', 'ny', 'nx', 'idx']
 
     X = DataFrameSelector(x_columns).transform(full_real)
     y = DataFrameSelector(y_columns).transform(full_real)
-
-    create_idx(X)
-    create_idx(grid_points)
-    create_idx(official_stations_latlon)
-
-    if parsed.comp_dist:
-        compute_distances(official_stations_latlon, grid_points)
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y,
-                                                        test_size=test_size,
-                                                        shuffle=True)
 
     official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
                      ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
                      ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
                      ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO']]
 
-    X_train_complete = official_station_daily_adder(
-            official_attr,
-<<<<<<< HEAD
-            official_stations_latlon,
-            include_distance=False).transform(
-=======
-            official_stations_latlon, include_distance=False).transform(
->>>>>>> f5240f007b47e35bbd67f784eaa48a7073e3c1e8
-            X_train, official_stations_daily)
+    X_complete = official_station_daily_adder(
+        official_attr,
+        include_distance=True, distances=grid_points).transform(
+        X, official_stations_daily)
 
-    print(X_train_complete.head(20))
+    X_train, X_test, y_train, y_test = train_test_split(X, y,
+                                                        test_size=test_size,
+                                                        shuffle=True)
