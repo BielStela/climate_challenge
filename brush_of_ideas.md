@@ -1,3 +1,15 @@
+# Situation
+
+Hi guys, basically back on the track.
+
+If you exeute utils reader either from the cli or calling the function
+`prepare_data`, the dataframes fro X and y are obtained. 
+
+Maybe I shouldn't do this split of X and y. I will corect it soon.
+
+From this X and y you can test models if desired. I will be uploading more soon.
+
+
 # Tasks
 
 + **Data exploration**

@@ -5,12 +5,18 @@ Created on Wed Jun 19 22:33:01 2019
 
 @author: BCJuan
 
-Functions for the pipeline devoted to create training, validation and test
+Functions for the pipeline devoted to create the full dataset
 
 All the files (.csv) must be in a folder named data. The structure is the same
 as the zip dowloaded from http://climate-challenge.herokuapp.com/data/.
 However there is a new folder named examples which has the sample
-submission files
+submission files.
+
+All the data is saved in data (if stated so in args).
+So the file should only be called once.
+
+However you can call the file from another file without saving
+
 """
 
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -19,7 +25,6 @@ import pandas as pd
 import urllib.request as req
 from zipfile import ZipFile
 from io import BytesIO
-from sklearn.model_selection import train_test_split
 import numpy as np
 import geopy.distance as distance
 from tqdm import tqdm as tqdm
@@ -32,6 +37,10 @@ test_size = 0.2
 def parse_arguments(parser):
     parser.add_argument("-d", dest="comp_dist",
                         help="compute distances and save them in a file",
+                        type=int,
+                        default=0)
+    parser.add_argument("-s", dest="save",
+                        help="save x and y in a folder ./data_for_models",
                         type=int,
                         default=0)
     return parser.parse_args()
@@ -185,10 +194,16 @@ def download_files(direc="./climateChallengeData/"):
         print("Data already downloaded")
 
 
-if __name__ == "__main__":
+def save_data_folder(X, y, direc="./data_for_models/"):
 
-    parser = argparse.ArgumentParser()
-    parsed = parse_arguments(parser)
+    if not path.exists(direc):
+        mkdir(direc)
+
+        X.to_csv(path.join(direc, "X.csv"))
+        y.to_csv(path.join(direc, "y.csv"))
+
+
+def prepare_data(include_distance=True, save_data=True):
 
     download_files()
     full_real = read_real_files()
@@ -205,16 +220,35 @@ if __name__ == "__main__":
     X = DataFrameSelector(x_columns).transform(full_real)
     y = DataFrameSelector(y_columns).transform(full_real)
 
-    official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
-                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
-                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
-                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO']]
+    official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                      'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
+                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
+                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
+                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
 
     X_complete = official_station_daily_adder(
         official_attr,
-        include_distance=True, distances=grid_points).transform(
+        include_distance=include_distance, distances=grid_points).transform(
         X, official_stations_daily)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y,
-                                                        test_size=test_size,
-                                                        shuffle=True)
+    X_complete.drop(columns=['day', 'nx', 'ny', 'idx'] +
+                    ['DATA_' + str(i) for i in
+                     range(len(official_stations_latlon))] +
+                    ['ESTACIO_' + str(i) for i in
+                     range(len(official_stations_latlon))], inplace=True)
+
+    if save_data:
+        save_data_folder(X_complete, y)
+    else:
+        return X_complete, y
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parsed = parse_arguments(parser)
+
+    prepare_data(include_distance=parsed.comp_dist,
+                 save_data=parsed.save)
