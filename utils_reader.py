@@ -42,7 +42,7 @@ def parse_arguments(parser):
     parser.add_argument("-s", dest="save",
                         help="save x and y in a folder ./data_for_models",
                         type=int,
-                        default=0)
+                        default=1)
     return parser.parse_args()
 
 
