@@ -220,18 +220,18 @@ def prepare_data(include_distance=1, save_data=1):
     X = DataFrameSelector(x_columns).transform(full_real)
     y = DataFrameSelector(y_columns).transform(full_real)
 
-#    official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                      'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
-#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
-#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
-
-    official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
+    official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                      'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
                      ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
-                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h']]
+                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
+                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
+
+#    official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
+#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
+#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
+#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h']]
 
     X_complete = official_station_daily_adder(
         official_attr,

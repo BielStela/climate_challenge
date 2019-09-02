@@ -1,0 +1,12 @@
+,name,score,variables
+0,random_forest_default,0.12781981641140544,"Index(['Unnamed: 0', 'Tm_0', 'Tx_0', 'Tn_0', 'HRm_0', 'RS24h_1', 'Tm_1',
+       'Tx_1', 'Tn_1', 'HRm_1', 'Tm_2', 'Tx_2', 'Tn_2', 'HRm_2', 'RS24h_2',
+       'Tm_3', 'Tx_3', 'Tn_3', 'HRm_3', 'RS24h'],
+      dtype='object')"
+1,random_forest_default_full_vars,0.12774701943494704,"Index(['Unnamed: 0', 'Tm_0', 'Tx_0', 'Tn_0', 'PPT24h_1', 'HRm_0', 'hPa_1',
+       'RS24h_1', 'VVem6', 'DVum6', 'VVx6', 'DVx6', 'Tm_1', 'Tx_1', 'Tn_1',
+       'HRm_1', 'Tm_2', 'Tx_2', 'Tn_2', 'PPT24h_2', 'HRm_2', 'hPa_2',
+       'RS24h_2', 'VVem10_2', 'DVum10_2', 'VVx10_2', 'DVx10_2', 'Tm_3', 'Tx_3',
+       'Tn_3', 'PPT24h', 'HRm_3', 'hPa', 'RS24h', 'VVem10_3', 'DVum10_3',
+       'VVx10_3', 'DVx10_3'],
+      dtype='object')"
