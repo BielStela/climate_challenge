@@ -38,7 +38,7 @@ def parse_arguments(parser):
     parser.add_argument("-d", dest="comp_dist",
                         help="compute distances and save them in a file",
                         type=int,
-                        default=0)
+                        default=1)
     parser.add_argument("-s", dest="save",
                         help="save x and y in a folder ./data_for_models",
                         type=int,
