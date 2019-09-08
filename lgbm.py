@@ -15,10 +15,13 @@ import lightgbm as lgb
 from utils_train import load_data, load_results
 from functools import partial
 from tqdm import tqdm
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import KFold
+from time import sleep
 
-
-N_FOLDS = 5
-MAX_EVALS = 3
+N_FOLDS = 3
+MAX_EVALS = 500
+ITERATION = 0
 
 SPACE = {
     'boosting_type': hp.choice('boosting_type',
@@ -43,7 +46,7 @@ SPACE = {
 }
 
 
-def objective(params, train_set, out_file, n_folds, pbar):
+def objective(params, X, y, out_file):
     """Objective function for Gradient Boosting
     Machine Hyperparameter Optimization"""
 
@@ -64,70 +67,73 @@ def objective(params, train_set, out_file, n_folds, pbar):
                            'subsample_for_bin',
                            'min_child_samples']:
         params[parameter_name] = int(params[parameter_name])
+    params['objective'] = 'regression'
+    params['n_jobs'] = -1
+    params['metric'] = 'mse'
+    params['verbose'] = 0
+    # params['device_type'] = 'gpu'
 
     start = timer()
 
     # Perform n_folds cross validation
-    cv_results = lgb.cv(params, train_set, num_boost_round=10000,
-                        nfold=n_folds, early_stopping_rounds=100,
-                        metrics='mse', seed=42)
+    results = []
+    fold = KFold(n_splits=N_FOLDS, shuffle=True)
+
+    for train_idx, test_idx in fold.split(X):
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+        train_set = lgb.Dataset(X_train, label=y_train)
+        test_set = lgb.Dataset(X_test, label=y_test)
+        bst = lgb.train(params, train_set,
+                        early_stopping_rounds=100,
+                        valid_sets=[test_set], verbose_eval=0)
+        y_pred = bst.predict(X_test)
+        results.append(mean_squared_error(y_test, y_pred))
 
     run_time = timer() - start
 
     # Extract the best score
-    best_score = np.max(cv_results['mse-mean'])
-
-    # Boosting rounds that returned the highest cv score
-    n_estimators = int(np.argmax(cv_results['mse-mean']) + 1)
+    best_score = np.mean(results)
 
     # Write to the csv file ('a' means append)
     of_connection = open(out_file, 'a')
     writer = csv.writer(of_connection)
-    writer.writerow([best_score, params, ITERATION, n_estimators, run_time])
+    writer.writerow([best_score, params, ITERATION, run_time])
 
-    pbar.update()
     # Dictionary with information for evaluation
     return {'loss': best_score, 'params': params, 'iteration': ITERATION,
-            'estimators': n_estimators,
             'train_time': run_time, 'status': STATUS_OK}
 
 
-def main():
-
-    X, y, variables = load_data()
-    print("Data Loaded")
-    df, i = load_results()
+def optimize(X, y, objective, name, space, max_evals):
 
     bayes_trials = Trials()
 
-    out_file = 'gbm_trials.csv'
+    out_file = name
     of_connection = open(out_file, 'w')
     writer = csv.writer(of_connection)
 
     # Write the headers to the file
-    writer.writerow(['loss', 'params', 'iteration', 'estimators',
+    writer.writerow(['loss', 'params', 'iteration',
                      'train_time'])
     of_connection.close()
-    train_set = lgb.Dataset(X, label=y)
 
-    global ITERATION
-
-    ITERATION = 0
-    pbar = tqdm(total=MAX_EVALS, desc="Hyperopt")
-    objective_partial = partial(objective, train_set=train_set,
-                                out_file=out_file,
-                                n_folds=N_FOLDS, pbar=pbar)
+    objective_partial = partial(objective, X=X, y=y,
+                                out_file=out_file)
 
     # Run optimization
-    fmin(fn=objective_partial, space=SPACE, algo=tpe.suggest,
-         max_evals=MAX_EVALS, trials=bayes_trials,
+    fmin(fn=objective_partial, space=space, algo=tpe.suggest,
+         max_evals=max_evals, trials=bayes_trials,
          rstate=np.random.RandomState(np.random.randint(0, 100, 1)))
 
-    pbar.close()
     bayes_trials_results = sorted(bayes_trials.results,
                                   key=lambda x: x['loss'])
     print(bayes_trials_results[:2])
 
 
 if __name__ == "__main__":
-    main()
+    X, y, variables = load_data()
+    print("Data Loaded")
+    df, i = load_results()
+    optimize(X, y, objective, name='lgbm_trials.csv', space=SPACE,
+             max_evals=MAX_EVALS)

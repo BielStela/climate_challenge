@@ -13,27 +13,111 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 from numpy import mean
 from utils_train import save_results, load_results, load_data
+from argparse import ArgumentParser
+from hyperopt import hp, STATUS_OK
+from timeit import default_timer as timer
+import numpy as np
+import csv
+from lgbm import optimize
+from hyperopt.pyll.base import scope
+from time import sleep
+
+N_FOLDS = 5
+MAX_EVALS = 100
+ITERATION = 0
+
+SPACE = {
+        'n_estimators': scope.int(hp.quniform('n_estimators', 50, 500, 20)),
+        # criterion
+        # max_depth
+        # 'min_samples_split'
+        # 'min_samples_leaf'
+        # min_weight_fraction_leaf
+        # 'max_features'
+        # max_leaf_nodes
+        # min_impurity_decrease
+        'bootstrap': hp.choice('bootstrap', [{'bootstrap': True,
+                                              'oob_score': True},
+                                             {'bootstrap': False,
+                                              'oob_score': False}]),
+        }
 
 
-def random_forest_default(X, y, df, variables, i):
+def parse():
 
+    parser = ArgumentParser()
+    parser.add_argument("--mode", dest="mode", help="default or optimize",
+                        type=str, default="default")
+    parsed = parser.parse_args()
+    return parsed
+
+
+def random_forest_default(X, y, df, variables, i, name):
+
+    if (df['name'] == name).sum():
+        print("Already computed")
+        return df, i
+    else:
+        results = []
+        fold = KFold(n_splits=5, shuffle=True)
+
+        for train_idx, test_idx in fold.split(X):
+            X_train, X_test = X[train_idx], X[test_idx]
+            y_train, y_test = y[train_idx], y[test_idx]
+
+            forest = RandomForestRegressor(n_jobs=-1)
+            forest.fit(X_train, y_train)
+            y_pred = forest.predict(X_test)
+
+            results.append(mean_squared_error(y_test, y_pred))
+
+        df = save_results(df, name, mean(results),
+                          variables, i)
+
+        return df, i + 1
+
+
+def objective(params, X, y, out_file):
+    """Objective function for Gradient Boosting
+    Machine Hyperparameter Optimization"""
+
+    # Keep track of evals
+    global ITERATION
+
+    ITERATION += 1
+
+    start = timer()
+
+    # Perform n_folds cross validation
     results = []
-    fold = KFold(n_splits=5, shuffle=True)
+    fold = KFold(n_splits=N_FOLDS, shuffle=True)
+
+    params['oob_score'] = params['bootstrap']['oob_score']
+    params['bootstrap'] = params['bootstrap']['bootstrap']
 
     for train_idx, test_idx in fold.split(X):
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
 
-        forest = RandomForestRegressor(n_jobs=-1)
+        forest = RandomForestRegressor(random_state=np.random.randint(0, 100))
+        forest.set_params(**params)
         forest.fit(X_train, y_train)
         y_pred = forest.predict(X_test)
-
         results.append(mean_squared_error(y_test, y_pred))
 
-    df = save_results(df, "random_forest_default_full_vars", mean(results),
-                      variables, i)
+    run_time = timer() - start
 
-    return df, i + 1
+    # Extract the best score
+    best_score = np.mean(results)
+
+    # Write to the csv file ('a' means append)
+    of_connection = open(out_file, 'a')
+    writer = csv.writer(of_connection)
+    writer.writerow([best_score, params, ITERATION, run_time])
+    
+    # Dictionary with information for evaluation
+    return {'loss': best_score, 'params': params, 'iteration': ITERATION,
+            'train_time': run_time, 'status': STATUS_OK}
 
 
 if __name__ == "__main__":
@@ -41,4 +125,13 @@ if __name__ == "__main__":
     X, y, variables = load_data()
     df, i = load_results()
 
-    df, i = random_forest_default(X, y, df,  variables, i)
+    parsed = parse()
+    if parsed.mode == "default":
+        df, i = random_forest_default(X, y,
+                                      df,
+                                      variables,
+                                      i,
+                                      "random_forest_default_full_vars")
+    else:
+        optimize(X, y, objective, name='forest_trials_full_vars.csv',
+                 space=SPACE, max_evals=MAX_EVALS)
