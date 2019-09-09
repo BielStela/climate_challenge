@@ -22,24 +22,26 @@ from lgbm import optimize
 from hyperopt.pyll.base import scope
 from time import sleep
 
-N_FOLDS = 5
+N_FOLDS = 3
 MAX_EVALS = 100
 ITERATION = 0
 
 SPACE = {
-        'n_estimators': scope.int(hp.quniform('n_estimators', 50, 500, 20)),
+        'n_estimators': scope.int(hp.quniform('n_estimators', 20, 500, 20)),
         # criterion
-        # max_depth
-        # 'min_samples_split'
-        # 'min_samples_leaf'
+        'max_depth': scope.int(hp.quniform('max_depth', 2, 20, 2)),
+        'min_samples_split': scope.int(hp.quniform('min_samples_split', 2,
+                                                   100, 5)),
+        'min_samples_leaf': scope.int(hp.quniform('min_samples_leaf',
+                                                  1, 10, 2))
         # min_weight_fraction_leaf
         # 'max_features'
         # max_leaf_nodes
         # min_impurity_decrease
-        'bootstrap': hp.choice('bootstrap', [{'bootstrap': True,
-                                              'oob_score': True},
-                                             {'bootstrap': False,
-                                              'oob_score': False}]),
+#        'bootstrap': hp.choice('bootstrap', [{'bootstrap': True,
+#                                              'oob_score': True},
+#                                             {'bootstrap': False,
+#                                              'oob_score': False}])
         }
 
 
@@ -92,14 +94,17 @@ def objective(params, X, y, out_file):
     results = []
     fold = KFold(n_splits=N_FOLDS, shuffle=True)
 
-    params['oob_score'] = params['bootstrap']['oob_score']
-    params['bootstrap'] = params['bootstrap']['bootstrap']
+#    params['oob_score'] = params['bootstrap']['oob_score']
+#    params['bootstrap'] = params['bootstrap']['bootstrap']
+    print(params['n_estimators'], params['max_depth'])
 
-    for train_idx, test_idx in fold.split(X):
+    for j, (train_idx, test_idx) in enumerate(fold.split(X)):
+        print(j)
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
 
-        forest = RandomForestRegressor(random_state=np.random.randint(0, 100))
+        forest = RandomForestRegressor(n_jobs=-1,
+                                       random_state=np.random.randint(42, 100))
         forest.set_params(**params)
         forest.fit(X_train, y_train)
         y_pred = forest.predict(X_test)
@@ -114,7 +119,7 @@ def objective(params, X, y, out_file):
     of_connection = open(out_file, 'a')
     writer = csv.writer(of_connection)
     writer.writerow([best_score, params, ITERATION, run_time])
-    
+    sleep(120)
     # Dictionary with information for evaluation
     return {'loss': best_score, 'params': params, 'iteration': ITERATION,
             'train_time': run_time, 'status': STATUS_OK}

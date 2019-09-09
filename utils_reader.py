@@ -249,8 +249,20 @@ def prepare_data(include_distance=1, save_data=1):
     else:
         return X_complete, y
 
+
 def file_for_prediction_n_submission():
+
+    df = pd.read_csv("./climateChallengeData/real/real_2016.csv")
+    y_true_partial = df.groupby('day', as_index=False).agg({'T_MEAN':'mean'})
+    official_stations_daily = read_official_stations()
+
+    dates = pd.date_range(start='1/1/2016', end='31/12/2016')
+    grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
+    x_y = grid_points[['nx','ny']]
+    create_idx(x_y)
     
+    
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
