@@ -33,6 +33,19 @@ import argparse
 np.random.seed(42)
 test_size = 0.2
 
+#    official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                      'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
+#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
+#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
+#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
+
+OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h']]
+
 
 def parse_arguments(parser):
     parser.add_argument("-d", dest="comp_dist",
@@ -43,6 +56,15 @@ def parse_arguments(parser):
                         help="save x and y in a folder ./data_for_models",
                         type=int,
                         default=1)
+    parser.add_argument("-n", dest="no_official",
+                        help="compute qwith no official",
+                        type=int,
+                        default=1)
+    parser.add_argument("-p", dest="pred",
+                        help="save for rpediction",
+                        type=int,
+                        default=1)
+
     return parser.parse_args()
 
 
@@ -194,16 +216,19 @@ def download_files(direc="./climateChallengeData/"):
         print("Data already downloaded")
 
 
-def save_data_folder(X, y, direc="./data_for_models/"):
+def save_data_folder(X, y=None, direc="./data_for_models/", name_X="X.csv",
+                     name_y=None):
 
     if not path.exists(direc):
         mkdir(direc)
 
-    X.to_csv(path.join(direc, "X.csv"))
-    y.to_csv(path.join(direc, "y.csv"))
+    X.to_csv(path.join(direc, name_X))
+    if name_y is not None:
+        y.to_csv(path.join(direc, name_y))
 
 
-def prepare_data(include_distance=1, save_data=1):
+def prepare_data(include_distance=1, save_data=1, official_atr=OFFICIAL_ATTR,
+                 add_not_official=False):
 
     download_files()
     full_real = read_real_files()
@@ -220,19 +245,6 @@ def prepare_data(include_distance=1, save_data=1):
     X = DataFrameSelector(x_columns).transform(full_real)
     y = DataFrameSelector(y_columns).transform(full_real)
 
-#    official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                      'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
-#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
-#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
-
-    official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
-                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
-                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h']]
-
     X_complete = official_station_daily_adder(
         official_attr,
         include_distance=include_distance, distances=grid_points).transform(
@@ -244,24 +256,54 @@ def prepare_data(include_distance=1, save_data=1):
                     ['ESTACIO_' + str(i) for i in
                      range(len(official_stations_latlon))], inplace=True)
 
+    if add_not_official:
+        unofficial_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
+        
     if save_data:
-        save_data_folder(X_complete, y)
+        save_data_folder(X_complete, y, name_y="y.csv")
     else:
         return X_complete, y
 
 
-def file_for_prediction_n_submission():
+def file_for_prediction_n_submission(include_distance=True,
+                                     official_attr=OFFICIAL_ATTR):
 
-    df = pd.read_csv("./climateChallengeData/real/real_2016.csv")
-    y_true_partial = df.groupby('day', as_index=False).agg({'T_MEAN':'mean'})
+    real_2016 = pd.read_csv("./climateChallengeData/real/real_2016.csv",
+                            index_col=None)
+    real_2016 = real_2016.groupby('day', as_index=False).agg({'T_MEAN': 'mean'})
+    real_2016.columns = ['date', 'mean']
+    real_2016.to_csv("./data_for_models/sub_partial.csv")
+
+    grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
+    official_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
+
+    final_df = []
+    data_ranges = pd.date_range(start='01/01/2016', end='31/12/2016')
+    for i in data_ranges:
+        if i.day > 5:
+            dates = np.repeat(i, len(grid_points))
+            sample_df = pd.DataFrame({'day': dates, 'nx': grid_points['nx'].values,
+                                      'ny': grid_points['ny'].values})
+            final_df.append(sample_df)
+    final_df = pd.concat(final_df, ignore_index=True, sort=False)
+
+    create_idx(final_df)
+    create_idx(grid_points)
+
     official_stations_daily = read_official_stations()
 
-    dates = pd.date_range(start='1/1/2016', end='31/12/2016')
-    grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
-    x_y = grid_points[['nx','ny']]
-    create_idx(x_y)
-    
-    
+    X_complete = official_station_daily_adder(
+        official_attr,
+        include_distance=include_distance, distances=grid_points).transform(
+        final_df, official_stations_daily)
+
+    X_complete.drop(columns=['nx_x', 'ny_x', 'idx'] +
+                    ['DATA_' + str(i) for i in
+                     range(len(official_stations_latlon))] +
+                    ['ESTACIO_' + str(i) for i in
+                     range(len(official_stations_latlon))], inplace=True)
+
+    save_data_folder(X_complete, name_X="for_submission.csv")
 
 if __name__ == "__main__":
 
@@ -270,3 +312,4 @@ if __name__ == "__main__":
 
     prepare_data(include_distance=parsed.comp_dist,
                  save_data=parsed.save)
+    file_for_prediction_n_submision()

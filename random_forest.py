@@ -12,7 +12,7 @@ from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 from numpy import mean
-from utils_train import save_results, load_results, load_data
+from utils_train import save_results, load_results, load_data, give_pred_format
 from argparse import ArgumentParser
 from hyperopt import hp, STATUS_OK
 from timeit import default_timer as timer
@@ -21,6 +21,7 @@ import csv
 from lgbm import optimize
 from hyperopt.pyll.base import scope
 from time import sleep
+import pandas as pd
 
 N_FOLDS = 3
 MAX_EVALS = 100
@@ -67,7 +68,8 @@ def random_forest_default(X, y, df, variables, i, name):
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
 
-            forest = RandomForestRegressor(n_jobs=-1)
+            forest = RandomForestRegressor(n_jobs=-1,
+                                           n_estimators=300)
             forest.fit(X_train, y_train)
             y_pred = forest.predict(X_test)
 
@@ -77,6 +79,17 @@ def random_forest_default(X, y, df, variables, i, name):
                           variables, i)
 
         return df, i + 1
+
+
+def predict_with_forest(X_test, X, y):
+
+    
+    forest = RandomForestRegressor(n_jobs=-1)
+    forest.fit(X, y)
+    y_pred = forest.predict(X_test)
+    
+    return y_pred
+
 
 
 def objective(params, X, y, out_file):
@@ -127,16 +140,22 @@ def objective(params, X, y, out_file):
 
 if __name__ == "__main__":
 
-    X, y, variables = load_data()
+    X, y, variables, X_test, days = load_data()
     df, i = load_results()
 
     parsed = parse()
     if parsed.mode == "default":
-        df, i = random_forest_default(X, y,
+        df, i = random_forest_default(X,
+                                      y,
                                       df,
                                       variables,
                                       i,
-                                      "random_forest_default_full_vars")
-    else:
+                                      "random_forest_default_300_estim_normal_vars")
+
+    elif parsed.mode == "optimize":
         optimize(X, y, objective, name='forest_trials_full_vars.csv',
                  space=SPACE, max_evals=MAX_EVALS)
+
+    elif parsed.mode == "predict":
+        y_pred = predict_with_forest(X_test, X, y)
+        give_pred_format(X_test, y_pred, "random_forest.csv", days)
