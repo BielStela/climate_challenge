@@ -14,35 +14,34 @@ from sklearn.metrics import mean_squared_error
 from numpy import mean
 from utils_train import save_results, load_results, load_data, give_pred_format
 from argparse import ArgumentParser
-from hyperopt import hp, STATUS_OK
+from hyperopt import hp, STATUS_OK, Trials, fmin, tpe
 from timeit import default_timer as timer
 import numpy as np
 import csv
-from lgbm import optimize
 from hyperopt.pyll.base import scope
 from time import sleep
-import pandas as pd
+from functools import partial
 
 N_FOLDS = 3
 MAX_EVALS = 100
 ITERATION = 0
 
 SPACE = {
-        'n_estimators': scope.int(hp.quniform('n_estimators', 20, 500, 20)),
+        'n_estimators': scope.int(hp.quniform('n_estimators', 10, 200, 10)),
         # criterion
-        'max_depth': scope.int(hp.quniform('max_depth', 2, 20, 2)),
+        'max_depth': scope.int(hp.quniform('max_depth', 2, 22, 4)),
         'min_samples_split': scope.int(hp.quniform('min_samples_split', 2,
-                                                   100, 5)),
+                                                   102, 10)),
         'min_samples_leaf': scope.int(hp.quniform('min_samples_leaf',
-                                                  1, 10, 2))
+                                                  1, 102, 10)),
         # min_weight_fraction_leaf
         # 'max_features'
         # max_leaf_nodes
         # min_impurity_decrease
-#        'bootstrap': hp.choice('bootstrap', [{'bootstrap': True,
-#                                              'oob_score': True},
-#                                             {'bootstrap': False,
-#                                              'oob_score': False}])
+        'bootstrap': hp.choice('bootstrap', [{'bootstrap': True,
+                                              'oob_score': True},
+                                             {'bootstrap': False,
+                                              'oob_score': False}])
         }
 
 
@@ -62,14 +61,13 @@ def random_forest_default(X, y, df, variables, i, name):
         return df, i
     else:
         results = []
-        fold = KFold(n_splits=5, shuffle=True)
+        fold = KFold(n_splits=10, shuffle=True)
 
         for train_idx, test_idx in fold.split(X):
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
 
-            forest = RandomForestRegressor(n_jobs=-1,
-                                           n_estimators=300)
+            forest = RandomForestRegressor(n_jobs=-1)
             forest.fit(X_train, y_train)
             y_pred = forest.predict(X_test)
 
@@ -83,13 +81,11 @@ def random_forest_default(X, y, df, variables, i, name):
 
 def predict_with_forest(X_test, X, y):
 
-    
     forest = RandomForestRegressor(n_jobs=-1)
     forest.fit(X, y)
     y_pred = forest.predict(X_test)
-    
-    return y_pred
 
+    return y_pred
 
 
 def objective(params, X, y, out_file):
@@ -107,12 +103,10 @@ def objective(params, X, y, out_file):
     results = []
     fold = KFold(n_splits=N_FOLDS, shuffle=True)
 
-#    params['oob_score'] = params['bootstrap']['oob_score']
-#    params['bootstrap'] = params['bootstrap']['bootstrap']
-    print(params['n_estimators'], params['max_depth'])
+    params['oob_score'] = params['bootstrap']['oob_score']
+    params['bootstrap'] = params['bootstrap']['bootstrap']
 
     for j, (train_idx, test_idx) in enumerate(fold.split(X)):
-        print(j)
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
 
@@ -138,6 +132,32 @@ def objective(params, X, y, out_file):
             'train_time': run_time, 'status': STATUS_OK}
 
 
+def optimize(X, y, objective, name, space, max_evals):
+
+    bayes_trials = Trials()
+
+    out_file = name
+    of_connection = open(out_file, 'w')
+    writer = csv.writer(of_connection)
+
+    # Write the headers to the file
+    writer.writerow(['loss', 'params', 'iteration',
+                     'train_time'])
+    of_connection.close()
+
+    objective_partial = partial(objective, X=X, y=y,
+                                out_file=out_file)
+
+    # Run optimization
+    fmin(fn=objective_partial, space=space, algo=tpe.suggest,
+         max_evals=max_evals, trials=bayes_trials,
+         rstate=np.random.RandomState(np.random.randint(0, 100, 1)))
+
+    bayes_trials_results = sorted(bayes_trials.results,
+                                  key=lambda x: x['loss'])
+    print(bayes_trials_results[:2])
+
+
 if __name__ == "__main__":
 
     X, y, variables, X_test, days = load_data()
@@ -150,7 +170,7 @@ if __name__ == "__main__":
                                       df,
                                       variables,
                                       i,
-                                      "random_forest_default_300_estim_normal_vars")
+                                      "random_forest_default_full_vars")
 
     elif parsed.mode == "optimize":
         optimize(X, y, objective, name='forest_trials_full_vars.csv',

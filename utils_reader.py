@@ -33,18 +33,23 @@ import argparse
 np.random.seed(42)
 test_size = 0.2
 
-#    official_attr = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                      'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
-#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
-#                     ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                      'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
+#OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
 
 OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
                  ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
                  ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
                  ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h']]
+
+OFFICIAL_ATTR_2 = [['DATA', 'Tm'],
+                   ['DATA', 'Tm'],
+                   ['DATA', 'Tm'],
+                   ['DATA', 'Tm']]
 
 
 def parse_arguments(parser):
@@ -59,7 +64,7 @@ def parse_arguments(parser):
     parser.add_argument("-n", dest="no_official",
                         help="compute qwith no official",
                         type=int,
-                        default=1)
+                        default=0)
     parser.add_argument("-p", dest="pred",
                         help="save for rpediction",
                         type=int,
@@ -80,7 +85,7 @@ class DataFrameSelector(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
-        return X[self.attribute_names]
+        return X.loc[:,self.attribute_names]
 
 
 class official_station_daily_adder(BaseEstimator, TransformerMixin):
@@ -227,7 +232,7 @@ def save_data_folder(X, y=None, direc="./data_for_models/", name_X="X.csv",
         y.to_csv(path.join(direc, name_y))
 
 
-def prepare_data(include_distance=1, save_data=1, official_atr=OFFICIAL_ATTR,
+def prepare_data(include_distance=1, save_data=1, official_attr=OFFICIAL_ATTR,
                  add_not_official=False):
 
     download_files()
@@ -239,30 +244,30 @@ def prepare_data(include_distance=1, save_data=1, official_atr=OFFICIAL_ATTR,
     compute_distances(official_stations_latlon, grid_points)
     create_idx(full_real)
 
-    y_columns = ['T_MEAN']
-    x_columns = ['day', 'ny', 'nx', 'idx']
-
-    X = DataFrameSelector(x_columns).transform(full_real)
-    y = DataFrameSelector(y_columns).transform(full_real)
-
-    X_complete = official_station_daily_adder(
+    df_full = official_station_daily_adder(
         official_attr,
         include_distance=include_distance, distances=grid_points).transform(
-        X, official_stations_daily)
+        full_real, official_stations_daily)
 
-    X_complete.drop(columns=['day', 'nx', 'ny', 'idx'] +
-                    ['DATA_' + str(i) for i in
-                     range(len(official_stations_latlon))] +
-                    ['ESTACIO_' + str(i) for i in
-                     range(len(official_stations_latlon))], inplace=True)
+    y_columns = ['T_MEAN']
+    x_columns = df_full.columns[df_full.columns != 'T_MEAN']
+
+    X = DataFrameSelector(x_columns).transform(df_full)
+    y = DataFrameSelector(y_columns).transform(df_full)
+
+    X.drop(columns=['day', 'nx', 'ny', 'idx', 'LAT', 'LON', 'T_MIN', 'T_MAX'] +
+                   ['DATA_' + str(i) for i in
+                    range(len(official_stations_latlon))] +
+                   ['ESTACIO_' + str(i) for i in
+                    range(len(official_stations_latlon))], inplace=True)
 
     if add_not_official:
         unofficial_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
-        
+
     if save_data:
-        save_data_folder(X_complete, y, name_y="y.csv")
+        save_data_folder(X, y, name_y="y.csv")
     else:
-        return X_complete, y
+        return X, y
 
 
 def file_for_prediction_n_submission(include_distance=True,
@@ -279,16 +284,19 @@ def file_for_prediction_n_submission(include_distance=True,
 
     final_df = []
     data_ranges = pd.date_range(start='01/01/2016', end='31/12/2016')
-    for i in data_ranges:
+    data_days = data_ranges.dayofyear - 1
+    for i, j in zip(data_ranges, data_days):
         if i.day > 5:
             dates = np.repeat(i, len(grid_points))
-            sample_df = pd.DataFrame({'day': dates, 'nx': grid_points['nx'].values,
+            days = np.repeat(j, len(grid_points))
+            sample_df = pd.DataFrame({'day': dates, 'ndays': days,
+                                      'nx': grid_points['nx'].values,
                                       'ny': grid_points['ny'].values})
             final_df.append(sample_df)
     final_df = pd.concat(final_df, ignore_index=True, sort=False)
 
     create_idx(final_df)
-    create_idx(grid_points)
+    compute_distances(official_stations_latlon, grid_points)
 
     official_stations_daily = read_official_stations()
 
@@ -297,7 +305,7 @@ def file_for_prediction_n_submission(include_distance=True,
         include_distance=include_distance, distances=grid_points).transform(
         final_df, official_stations_daily)
 
-    X_complete.drop(columns=['nx_x', 'ny_x', 'idx'] +
+    X_complete.drop(columns=['nx', 'ny', 'idx'] +
                     ['DATA_' + str(i) for i in
                      range(len(official_stations_latlon))] +
                     ['ESTACIO_' + str(i) for i in
@@ -305,6 +313,24 @@ def file_for_prediction_n_submission(include_distance=True,
 
     save_data_folder(X_complete, name_X="for_submission.csv")
 
+
+def give_dataset_2ntask(points=[(186, 227)], include_distance=False,
+                        official_attr=OFFICIAL_ATTR_2):
+
+    full_real = read_real_files()
+    official_stations_daily = read_official_stations()
+    official_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
+
+    df_full = official_station_daily_adder(
+        official_attr,
+        include_distance=include_distance, distances=grid_points).transform(
+        full_real, official_stations_daily)
+
+    df_full.drop(columns=['ndays', 'T_MIN', 'T_MAX',
+                             'LAT', 'LON'] +
+                ['DATA_' + str(i) for i in
+                 range(len(official_stations_latlon))], inplace=True)
+    
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -312,4 +338,4 @@ if __name__ == "__main__":
 
     prepare_data(include_distance=parsed.comp_dist,
                  save_data=parsed.save)
-    file_for_prediction_n_submision()
+    file_for_prediction_n_submission()

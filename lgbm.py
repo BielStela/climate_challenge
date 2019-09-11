@@ -12,12 +12,13 @@ import numpy as np
 from hyperopt import hp
 from hyperopt import tpe, Trials, fmin
 import lightgbm as lgb
-from utils_train import load_data, load_results
+from utils_train import load_data, load_results, save_results
 from functools import partial
 from tqdm import tqdm
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
 from time import sleep
+from argparse import ArgumentParser
 
 N_FOLDS = 3
 MAX_EVALS = 500
@@ -44,6 +45,15 @@ SPACE = {
     'reg_lambda': hp.uniform('reg_lambda', 0.0, 1.0),
     'colsample_bytree': hp.uniform('colsample_by_tree', 0.6, 1.0)
 }
+
+
+def parse():
+
+    parser = ArgumentParser()
+    parser.add_argument("--mode", dest="mode", help="default or optimize",
+                        type=str, default="default")
+    parsed = parser.parse_args()
+    return parsed
 
 
 def objective(params, X, y, out_file):
@@ -131,9 +141,53 @@ def optimize(X, y, objective, name, space, max_evals):
     print(bayes_trials_results[:2])
 
 
+def lgbm_default(X, y, df, variables, i, name):
+
+    if (df['name'] == name).sum():
+        print("Already computed")
+        return df, i
+    else:
+        params = {"learning_rate": 0.1,
+                  "num_leaves": 255,
+                  "num_trees": 500,
+                  "min_data_in_leaf": 0,
+                  "min_sum_hessian_in_leaf": 100}
+        params['objective'] = 'regression'
+        params['n_jobs'] = -1
+        params['metric'] = 'mse'
+        params['verbose'] = 0
+        results = []
+        fold = KFold(n_splits=10, shuffle=True)
+
+        for train_idx, test_idx in fold.split(X):
+            X_train, X_test = X[train_idx], X[test_idx]
+            y_train, y_test = y[train_idx], y[test_idx]
+            train_set = lgb.Dataset(X_train, label=y_train)
+            test_set = lgb.Dataset(X_test, label=y_test)
+            bst = lgb.train(params, train_set,
+                            valid_sets=[test_set], verbose_eval=0)
+            y_pred = bst.predict(X_test)
+            results.append(mean_squared_error(y_test, y_pred))
+
+        df = save_results(df, name, np.mean(results),
+                          variables, i)
+
+        return df, i + 1
+
+
 if __name__ == "__main__":
-    X, y, variables = load_data()
+    X, y, variables,X_test, days = load_data()
     print("Data Loaded")
     df, i = load_results()
-    optimize(X, y, objective, name='lgbm_trials.csv', space=SPACE,
-             max_evals=MAX_EVALS)
+
+    parsed = parse()
+    if parsed.mode == "default":
+        df, i = lgbm_default(X,
+                             y,
+                             df,
+                             variables,
+                             i,
+                             "lgbm_default_full_vars")
+    else:
+        optimize(X, y, objective, name='lgbm_trials.csv', space=SPACE,
+                 max_evals=MAX_EVALS)

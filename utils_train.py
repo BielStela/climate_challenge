@@ -11,14 +11,22 @@ from pandas import read_csv, DataFrame
 from sklearn.preprocessing import StandardScaler, Imputer
 import pandas as pd
 
-
 def give_pred_format(X_test, y_pred, name, days):
-    df = pd.DataFrame({'date': days, 'mean': y_pred})
+    df = pd.DataFrame(data={'date': days, 'mean': y_pred}, index=None)
+    df['date'] = pd.to_datetime(df['date'], format="%Y-%m-%d", exact=True)
     df = df.groupby('date', as_index=False).agg({'mean': 'mean'})
-    df_partial = pd.read_csv("./data_for_models/sub_partial.csv",
-                             index_col=False)
-    result = pd.concat([df, df_partial])
-    result.to_csv(name)
+    df['date'] = df['date'].dt.strftime("%d/%m/%Y")
+    df_partial = pd.read_csv("./data_for_models/sub_partial.csv", index_col=0)
+    df_partial['date'] = pd.to_datetime(df_partial['date'], format="%d/%m/%Y",
+                                        exact=True)
+    df_partial['date'] = df_partial['date'].dt.strftime("%d/%m/%Y")
+    result = pd.concat([df, df_partial], ignore_index=True)
+    result['date'] = pd.to_datetime(result['date'], format="%d/%m/%Y",
+                                    exact=True)
+    result.sort_values('date', inplace=True)
+    result.reset_index(inplace=True, drop=True)
+    result['date'] = result['date'].dt.strftime("%d/%m/%Y")
+    result.to_csv(name, columns=['date', 'mean'], index=False)
 
 
 def load_data(name_x="./data_for_models/X.csv",
