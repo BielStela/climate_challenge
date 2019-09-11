@@ -170,7 +170,7 @@ if __name__ == "__main__":
                                       df,
                                       variables,
                                       i,
-                                      "random_forest_default_full_vars")
+                                      "random_forest_default_normal_vars")
 
     elif parsed.mode == "optimize":
         optimize(X, y, objective, name='forest_trials_full_vars.csv',
