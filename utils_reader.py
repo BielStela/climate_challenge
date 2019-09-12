@@ -46,11 +46,6 @@ OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
 #                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
 #                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h']]
 
-OFFICIAL_ATTR_2 = [['DATA', 'Tm'],
-                   ['DATA', 'Tm'],
-                   ['DATA', 'Tm'],
-                   ['DATA', 'Tm']]
-
 
 def parse_arguments(parser):
     parser.add_argument("-d", dest="comp_dist",
@@ -171,10 +166,8 @@ def compute_distances(latLonStations, gridPoints,
     gridPoints.drop(columns=['nx', 'ny', 'LAT', 'LON'], inplace=True)
     gridPoints.to_csv(file_name)
 
-
 def create_idx(df):
-    df['idx'] = df.apply(lambda x: str(int(x['nx'])).strip() +
-                         str(int(x['ny'])).strip(), axis=1)
+    df['idx'] = df['nx'].astype(str) + df['ny'].astype(str)
 
 
 def download_files(direc="./climateChallengeData/"):
@@ -314,23 +307,7 @@ def file_for_prediction_n_submission(include_distance=True,
     save_data_folder(X_complete, name_X="for_submission.csv")
 
 
-def give_dataset_2ntask(points=[(186, 227)], include_distance=False,
-                        official_attr=OFFICIAL_ATTR_2):
 
-    full_real = read_real_files()
-    official_stations_daily = read_official_stations()
-    official_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
-
-    df_full = official_station_daily_adder(
-        official_attr,
-        include_distance=include_distance, distances=grid_points).transform(
-        full_real, official_stations_daily)
-
-    df_full.drop(columns=['ndays', 'T_MIN', 'T_MAX',
-                             'LAT', 'LON'] +
-                ['DATA_' + str(i) for i in
-                 range(len(official_stations_latlon))], inplace=True)
-    
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
