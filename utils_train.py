@@ -18,12 +18,13 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from tqdm import tqdm 
 import pickle
-
+from time import sleep
 
 OFFICIAL_ATTR_2 = [['DATA', 'Tm'],
                    ['DATA', 'Tm'],
                    ['DATA', 'Tm'],
                    ['DATA', 'Tm']]
+
 
 def give_pred_format(X_test, y_pred, name, days):
     df = pd.DataFrame(data={'date': days, 'mean': y_pred}, index=None)
@@ -91,7 +92,7 @@ def classify_one_idx(X):
     scaler = StandardScaler()
     X_t = scaler.fit_transform(
             X[X.columns[(X.columns != 'T_MEAN') &
-                        (X.columns != 'idx') & (X.columns != 'day')]])
+                        (X.columns != 'idx') & (X.columns != 'day')]].values)
     y = X['T_MEAN'].values
 
     results = []
@@ -107,7 +108,7 @@ def classify_one_idx(X):
 
         results.append(mean_squared_error(y_test, y_pred))
 
-    linear = LinearRegression()
+    linear = LinearRegression(n_jobs=-1)
     linear.fit(X_t, y)
 
     return np.mean(results), linear.coef_, linear.intercept_
@@ -118,18 +119,15 @@ def give_n_points_n_weights(df, n_points=1, identifier='idx'):
     # 0 for values of mse out of bag, 1 for coefs and 2 for intercept
     list_mins = [[], [], []]
 
-    counter = 0
     list_ids = np.unique(df[identifier])
     for i in tqdm(list_ids):
-        X = df[df[identifier] == i]
+        X = df[df[identifier] == i].copy()
         m, c, i = classify_one_idx(X)
         for j, h in enumerate(list([m, c, i])):
             list_mins[j].append(h)
-        counter += 1
-        if counter > 20:
-            break
+
     new_points = list_ids[np.argpartition(list_mins[0], -n_points)[-n_points:]]
-    return new_points, list_mins[0], list_mins[1], list_ids
+    return new_points, list_mins[1], list_mins[2], list_ids
 
 
 def train_2nd_task_min_error(include_distance=False,
@@ -155,42 +153,40 @@ def train_2nd_task_min_error(include_distance=False,
     full_coef_list = []
     full_intercept_list = []
     full_id_list = []
-    full_list_of_points = []
     points = []
 
     points.append(new_points)
-    full_list_of_points.append(new_points)
 
-    for count in tqdm(range(1, 3)):
+    for count in tqdm(range(1, 11)):
         extra = []
         for i in new_points:
             extra.append(full_real[full_real['idx'] == i])
             # full_real = full_real[full_real['idx'] != i]
 
         for j, i in enumerate(extra):
-            i['day'] = pd.to_datetime(i['day'], infer_datetime_format=True)
+            i.loc[:, 'day'] = pd.to_datetime(i['day'],
+                                             infer_datetime_format=True)
             df_full = df_full.merge(i, how='inner',
                                     left_on='day', right_on='day',
                                     suffixes=("", "_" +
-                                              str(j+1)))
-
+                                              str(count)), copy=False)
         df_full.drop(columns=['idx_' + str(i) for i in
-                              range(1, len(extra)+1)], inplace=True)
+                              range(count, count+1)], inplace=True)
 
         new_points, coefs, intercepts, list_ids = give_n_points_n_weights(df_full)
         points.append(new_points)
 
-        if count in list([1,2, 5, 10]):
+        if count in list([1, 2, 5, 10]):
             full_coef_list.append(coefs)
             full_intercept_list.append(intercepts)
             full_id_list.append(list_ids)
-            full_list_of_points.append(points)
 
+        sleep(240)
     root = "./climateChallengeData/results_task_2/"
     dump_pickle(path.join(root, "coefs.pkl"), full_coef_list)
     dump_pickle(path.join(root, "intercepts.pkl"), full_intercept_list)
     dump_pickle(path.join(root, "list_ids.pkl"), full_id_list)
-    dump_pickle(path.join(root, "points.pkl"), full_list_of_points)
+    dump_pickle(path.join(root, "points.pkl"), points)
 
 
 def dump_pickle(name, arr):

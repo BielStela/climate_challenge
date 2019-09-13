@@ -12,7 +12,7 @@ import numpy as np
 from hyperopt import hp
 from hyperopt import tpe, Trials, fmin
 import lightgbm as lgb
-from utils_train import load_data, load_results, save_results
+from utils_train import load_data, load_results, save_results, give_pred_format
 from functools import partial
 from tqdm import tqdm
 from sklearn.metrics import mean_squared_error
@@ -175,8 +175,27 @@ def lgbm_default(X, y, df, variables, i, name):
         return df, i + 1
 
 
+def predict_with_lgbm(X_test, X, y):
+
+    params = {"learning_rate": 0.1,
+              "num_leaves": 255,
+              "num_trees": 500,
+              "min_data_in_leaf": 0,
+              "min_sum_hessian_in_leaf": 100}
+    params['objective'] = 'regression'
+    params['n_jobs'] = -1
+    params['metric'] = 'mse'
+    params['verbose'] = 0
+    train_set = lgb.Dataset(X, label=y)
+    bst = lgb.train(params, train_set, verbose_eval=0)
+    y_pred = bst.predict(X_test)
+
+    return y_pred
+
+
 if __name__ == "__main__":
-    X, y, variables,X_test, days = load_data()
+
+    X, y, variables, X_test, days = load_data()
     print("Data Loaded")
     df, i = load_results()
 
@@ -188,6 +207,9 @@ if __name__ == "__main__":
                              variables,
                              i,
                              "lgbm_default_full_vars")
-    else:
+    elif parsed.mode == "optimize":
         optimize(X, y, objective, name='lgbm_trials.csv', space=SPACE,
                  max_evals=MAX_EVALS)
+    else:
+        y_pred = predict_with_lgbm(X_test, X, y)
+        give_pred_format(X_test, y_pred, "./submission/lgbm.csv", days)
