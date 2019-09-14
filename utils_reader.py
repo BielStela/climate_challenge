@@ -46,6 +46,7 @@ OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
                  ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
                  ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h']]
 
+# based on a threshold of 
 
 def parse_arguments(parser):
     parser.add_argument("-d", dest="comp_dist",
@@ -103,12 +104,14 @@ class official_station_daily_adder(BaseEstimator, TransformerMixin):
 
     def transform(self, X, y):
         # to_datetime functions is super slow if format is not supplied
-        X['day'] = pd.to_datetime(X['day'], infer_datetime_format=True)
         self.full = X.copy()
 
         for i, j in tqdm(zip(self.attributes_to_add,
                              range(len(self.attributes_to_add))),
                          total=len(self.attributes_to_add)):
+            y[j]['DATA'] = pd.to_datetime(y[j]['DATA'],
+                                          format="%Y-%m-%d", exact=True)
+            y[j]['DATA'] = y[j]['DATA'].dt.strftime("%Y-%m-%d")
             self.full = self.full.merge(y[j][i], how='inner',
                                         left_on='day', right_on='DATA',
                                         suffixes=("_" + str(j-1), "_" +
@@ -145,12 +148,33 @@ def read_real_files(direc="./climateChallengeData/real"):
         name = path.join(direc, i)
         files.append(pd.read_csv(name))
     full_file = pd.concat(files)
+
+    full_file['day'] = pd.to_datetime(full_file['day'], format="%d/%m/%Y",
+                                      exact=True)
+    full_file['day'] = full_file['day'].dt.strftime("%Y-%m-%d")
     return full_file
 
 
 def read_official_stations(name="./climateChallengeData/data_S2_S3_S4.xlsx"):
     return pd.read_excel(name, delimeter=";", sheet_name=[0, 1, 2, 3])
 
+
+def read_hourly_official(direc="./climateChallengeData/data_hours"):
+
+    hour_files = []
+    for i in listdir(direc):
+        file = pd.read_csv(path.join(direc, i), delimiter=";")
+        file['date'] = pd.to_datetime(file['DATA'],
+                                      format="%d/%m/%Y %H:%M",
+                                      errors='coerce').dt.date
+        mask = file.date.isnull()
+        file.loc[mask, 'date'] = pd.to_datetime(file['DATA'],
+                                                format="%d/%m/%Y",
+                                                errors='coerce').dt.date
+        file['date'] = pd.to_datetime(file['date'],
+                                      format="%Y-%m-%d",
+                                      exact=True).dt.strftime("%Y-%m-%d")
+        hour_files.append()
 
 def compute_distances(latLonStations, gridPoints,
                       file_name="./climateChallengeData/distances.csv"):
@@ -165,6 +189,7 @@ def compute_distances(latLonStations, gridPoints,
     create_idx(gridPoints)
     gridPoints.drop(columns=['nx', 'ny', 'LAT', 'LON'], inplace=True)
     gridPoints.to_csv(file_name)
+
 
 def create_idx(df):
     df['idx'] = df['nx'].astype(str) + df['ny'].astype(str)
@@ -226,7 +251,7 @@ def save_data_folder(X, y=None, direc="./data_for_models/", name_X="X.csv",
 
 
 def prepare_data(include_distance=1, save_data=1, official_attr=OFFICIAL_ATTR,
-                 add_not_official=False):
+                 add_not_official=False, add_hourly_data=False):
 
     download_files()
     full_real = read_real_files()
@@ -242,6 +267,12 @@ def prepare_data(include_distance=1, save_data=1, official_attr=OFFICIAL_ATTR,
         include_distance=include_distance, distances=grid_points).transform(
         full_real, official_stations_daily)
 
+    if add_not_official:
+        unofficial_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
+
+    if add_hourly_data:
+        
+
     y_columns = ['T_MEAN']
     x_columns = df_full.columns[df_full.columns != 'T_MEAN']
 
@@ -253,9 +284,6 @@ def prepare_data(include_distance=1, save_data=1, official_attr=OFFICIAL_ATTR,
                     range(len(official_stations_latlon))] +
                    ['ESTACIO_' + str(i) for i in
                     range(len(official_stations_latlon))], inplace=True)
-
-    if add_not_official:
-        unofficial_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
 
     if save_data:
         save_data_folder(X, y, name_y="y.csv")

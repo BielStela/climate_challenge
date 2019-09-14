@@ -91,10 +91,13 @@ def load_results(name="./results.csv"):
 
 def classify_one_idx(X):
 
-    scaler = StandardScaler()
-    X_t = scaler.fit_transform(
-            X[X.columns[(X.columns != 'T_MEAN') &
-                        (X.columns != 'idx') & (X.columns != 'day')]].values)
+#    scaler = StandardScaler()
+#    X_t = scaler.fit_transform(
+#            X[X.columns[(X.columns != 'T_MEAN') &
+#                        (X.columns != 'idx') & (X.columns != 'day')]].values)
+
+    X_t = X[X.columns[(X.columns != 'T_MEAN') &
+                      (X.columns != 'idx') & (X.columns != 'day')]].values
     y = X['T_MEAN'].values
 
     results = []
@@ -123,13 +126,13 @@ def give_n_points_n_weights(df, n_points=1, identifier='idx'):
 
     list_ids = np.unique(df[identifier])
     for i in tqdm(list_ids):
-        X = df[df[identifier] == i].copy()
-        m, c, i = classify_one_idx(X)
-        for j, h in enumerate(list([m, c, i])):
+        X = df[df[identifier] == i]
+        mean_error, coefs, intercepts = classify_one_idx(X)
+        for j, h in enumerate(list([mean_error, coefs, intercepts])):
             list_mins[j].append(h)
 
     new_points = list_ids[np.argpartition(list_mins[0], -n_points)[-n_points:]]
-    return new_points, list_mins[1], list_mins[2], list_ids
+    return new_points, list_mins[1], list_mins[2], list_ids, list_mins[0]
 
 
 def train_2nd_task_min_error(include_distance=False,
@@ -150,12 +153,13 @@ def train_2nd_task_min_error(include_distance=False,
     df_full.drop(columns=['DATA_' + str(i) for i in
                           range(len(official_stations_latlon))], inplace=True)
 
-    new_points, coefs, intercepts, list_ids = give_n_points_n_weights(df_full)
+    new_points, coefs, intercepts, list_ids, errors = give_n_points_n_weights(df_full)
 
     full_coef_list = []
     full_intercept_list = []
     full_id_list = []
     points = []
+    error_list = []
 
     points.append(new_points)
 
@@ -166,8 +170,6 @@ def train_2nd_task_min_error(include_distance=False,
             # full_real = full_real[full_real['idx'] != i]
 
         for j, i in enumerate(extra):
-            i.loc[:, 'day'] = pd.to_datetime(i['day'],
-                                             infer_datetime_format=True)
             df_full = df_full.merge(i, how='inner',
                                     left_on='day', right_on='day',
                                     suffixes=("", "_" +
@@ -175,9 +177,9 @@ def train_2nd_task_min_error(include_distance=False,
         df_full.drop(columns=['idx_' + str(i) for i in
                               range(count, count+1)], inplace=True)
 
-        new_points, coefs, intercepts, list_ids = give_n_points_n_weights(df_full)
+        new_points, coefs, intercepts, list_ids, errors = give_n_points_n_weights(df_full)
         points.append(new_points)
-
+        error_list.append(errors)
         if count in list([1, 2, 5, 10]):
             full_coef_list.append(coefs)
             full_intercept_list.append(intercepts)
@@ -189,6 +191,7 @@ def train_2nd_task_min_error(include_distance=False,
     dump_pickle(path.join(ROOT, "intercepts.pkl"), full_intercept_list)
     dump_pickle(path.join(ROOT, "list_ids.pkl"), full_id_list)
     dump_pickle(path.join(ROOT, "points.pkl"), points)
+    dump_pickle(path.join(ROOT, "error.pkl"), error_list)
 
 
 def dump_pickle(name, arr):
@@ -216,7 +219,9 @@ def give_prediction_2nd_task():
         positions[0].append(int(points[j][0][:3]))
         positions[1].append(int(points[j][0][3:]))
 
-    df1 = pd.DataFrame({'est':index, 'nx':positions[0], 'ny':positions[1]})
+    df1 = pd.DataFrame({'est': index, 'nx': positions[0], 'ny': positions[1]})
+
+    dump_pickle(path.join(ROOT, "1st_dataframe.pkl"), df1)
 
     columns = ['nx', 'ny', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7', 'w8',
                'w9', 'w10', 'w11', 'w12', 'w13', 'w14', 'b']
@@ -236,6 +241,16 @@ def give_prediction_2nd_task():
             df2 = df2.append(new_dict, ignore_index=True)
 
     dump_pickle(path.join(ROOT, "2nd_dataframe.pkl"), df2)
+
+
+def arrange_pred_2ndtask():
+    part1 = read_pickle(path.join(ROOT, "1st_dataframe.pkl"))
+    part2 = read_pickle(path.join(ROOT, "2nd_dataframe.pkl"))
+
+    part1.to_csv(path.join(ROOT, "prediction.csv"), index=False)
+    part2['nx'] = part2['nx'].astype(int)
+    part2['ny'] = part2['ny'].astype(int)
+    part2.to_csv(path.join(ROOT, "prediction.csv"), mode='a', index=False)
 
 
 if __name__ == "__main__":
