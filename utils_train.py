@@ -25,6 +25,8 @@ OFFICIAL_ATTR_2 = [['DATA', 'Tm'],
                    ['DATA', 'Tm'],
                    ['DATA', 'Tm']]
 
+ROOT = "./climateChallengeData/results_task_2/"
+
 
 def give_pred_format(X_test, y_pred, name, days):
     df = pd.DataFrame(data={'date': days, 'mean': y_pred}, index=None)
@@ -182,16 +184,58 @@ def train_2nd_task_min_error(include_distance=False,
             full_id_list.append(list_ids)
 
         sleep(240)
-    root = "./climateChallengeData/results_task_2/"
-    dump_pickle(path.join(root, "coefs.pkl"), full_coef_list)
-    dump_pickle(path.join(root, "intercepts.pkl"), full_intercept_list)
-    dump_pickle(path.join(root, "list_ids.pkl"), full_id_list)
-    dump_pickle(path.join(root, "points.pkl"), points)
+
+    dump_pickle(path.join(ROOT, "coefs.pkl"), full_coef_list)
+    dump_pickle(path.join(ROOT, "intercepts.pkl"), full_intercept_list)
+    dump_pickle(path.join(ROOT, "list_ids.pkl"), full_id_list)
+    dump_pickle(path.join(ROOT, "points.pkl"), points)
 
 
 def dump_pickle(name, arr):
     with open(name, 'wb') as fp:
         pickle.dump(arr, fp)
+
+
+def read_pickle(name):
+    with open(name, 'rb') as fp:
+        return pickle.load(fp)
+
+
+def give_prediction_2nd_task():
+    coefs = read_pickle(path.join(ROOT, "coefs.pkl"))
+    inter = read_pickle(path.join(ROOT, "intercepts.pkl"))
+    ids = read_pickle(path.join(ROOT, "list_ids.pkl"))
+    points = read_pickle(path.join(ROOT, "points.pkl"))
+
+    index = ['e5', 'e5', 'e6', 'e5', 'e6', 'e7', 'e8', 'e9',
+             'e5', 'e6', 'e7', 'e8', 'e9', 'e10', 'e11', 'e12', 'e13', 'e14']
+    positions = [[], []]
+
+    for i, j in enumerate([1, 1, 2, 1, 2, 3, 4, 5,
+                           1, 2, 3, 4, 5, 6, 7, 8, 9, 10]):
+        positions[0].append(int(points[j][0][:3]))
+        positions[1].append(int(points[j][0][3:]))
+
+    df1 = pd.DataFrame({'est':index, 'nx':positions[0], 'ny':positions[1]})
+
+    columns = ['nx', 'ny', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7', 'w8',
+               'w9', 'w10', 'w11', 'w12', 'w13', 'w14', 'b']
+    df2 = pd.DataFrame(columns=columns)
+
+    for k, i in tqdm(enumerate(ids[0])):
+        for j in range(len(ids)):
+            length = len(coefs[j][0])
+            new_dict = {}
+            new_dict['nx'] = int(i[:3])
+            new_dict['ny'] = int(i[3:])
+            for h in range(length):
+                new_dict[columns[h+2]] = coefs[j][k][h]
+            for h in range(length+2, len(columns)-1):
+                new_dict[columns[h]] = "-"
+            new_dict['b'] = inter[j][k]
+            df2 = df2.append(new_dict, ignore_index=True)
+
+    dump_pickle(path.join(ROOT, "2nd_dataframe.pkl"), df2)
 
 
 if __name__ == "__main__":
