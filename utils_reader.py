@@ -271,7 +271,7 @@ def prepare_data(include_distance=1, save_data=1, official_attr=OFFICIAL_ATTR,
         unofficial_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
 
     if add_hourly_data:
-        
+        pass
 
     y_columns = ['T_MEAN']
     x_columns = df_full.columns[df_full.columns != 'T_MEAN']
