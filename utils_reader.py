@@ -33,20 +33,30 @@ import argparse
 np.random.seed(42)
 test_size = 0.2
 
-#OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
-#
-OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
+OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
                  ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h']]
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
 
+#OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h']]
+
+
+OFFICIAL_ATTR_HOURLY = [['DATA', 'T', 'TX', 'TN', 'HR', 'HRN',
+                         'HRX', 'PPT', 'VVM10', 'DVM10', 'VVX10', 'DVVX10',
+                         'Unnamed: 13'],
+                        ['DATA', 'T', 'Tx', 'Tn', 'HR', 'HRn', 'HRx', 'PPT',
+                         'VVM10', 'DVM10', 'VVX10', 'DVX10', 'RS'],
+                        ['DATA', 'T', 'Tx', 'Tn', 'HR', 'HRn', 'HRx', 'PPT',
+                         'VVM10', 'DVM10', 'VVX10', 'DVX10', 'RS'],
+                        ['DATA', 'T', 'Tx', 'Tn', 'HR', 'HRN', 'HRX']]
 # based on a threshold of 
+
 
 def parse_arguments(parser):
     parser.add_argument("-d", dest="comp_dist",
@@ -84,7 +94,7 @@ class DataFrameSelector(BaseEstimator, TransformerMixin):
         return X.loc[:,self.attribute_names]
 
 
-class official_station_daily_adder(BaseEstimator, TransformerMixin):
+class official_station_adder(BaseEstimator, TransformerMixin):
 
     """
     Class for adding attributes from official stations to the values predicted
@@ -105,7 +115,7 @@ class official_station_daily_adder(BaseEstimator, TransformerMixin):
     def transform(self, X, y):
         # to_datetime functions is super slow if format is not supplied
         self.full = X.copy()
-
+        jj = len(self.full.columns)
         for i, j in tqdm(zip(self.attributes_to_add,
                              range(len(self.attributes_to_add))),
                          total=len(self.attributes_to_add)):
@@ -114,8 +124,9 @@ class official_station_daily_adder(BaseEstimator, TransformerMixin):
             y[j]['DATA'] = y[j]['DATA'].dt.strftime("%Y-%m-%d")
             self.full = self.full.merge(y[j][i], how='inner',
                                         left_on='day', right_on='DATA',
-                                        suffixes=("_" + str(j-1), "_" +
-                                                  str(j)))
+                                        suffixes=("_" + str(jj), "_" +
+                                                  str(jj+1)))
+            jj += 1
 
         if self.include_distance:
             create_idx(self.full)
@@ -123,7 +134,6 @@ class official_station_daily_adder(BaseEstimator, TransformerMixin):
                                         left_on='idx', right_on='idx')
 
         return self.full
-
 
 def read_real_files(direc="./climateChallengeData/real"):
     """
@@ -158,7 +168,6 @@ def read_real_files(direc="./climateChallengeData/real"):
 def read_official_stations(name="./climateChallengeData/data_S2_S3_S4.xlsx"):
     return pd.read_excel(name, delimeter=";", sheet_name=[0, 1, 2, 3])
 
-
 def read_hourly_official(direc="./climateChallengeData/data_hours"):
 
     hour_files = []
@@ -171,10 +180,26 @@ def read_hourly_official(direc="./climateChallengeData/data_hours"):
         file.loc[mask, 'date'] = pd.to_datetime(file['DATA'],
                                                 format="%d/%m/%Y",
                                                 errors='coerce').dt.date
-        file['date'] = pd.to_datetime(file['date'],
+        file['DATA'] = pd.to_datetime(file['date'],
                                       format="%Y-%m-%d",
-                                      exact=True).dt.strftime("%Y-%m-%d")
-        hour_files.append()
+                                      exact=True)
+        file['year'] = file['DATA'].dt.year
+        file['day'] = file['DATA'].dt.day
+        file_filtered = file[file.year.isin(['2012', '2013',
+                                             '2014', '2015',
+                                             '2016'])]
+        file_filtered = file_filtered[file_filtered.day.isin(['1',
+                                                              '2',
+                                                              '3',
+                                                              '4',
+                                                              '5'])]
+        hours_grouped = file_filtered.groupby('DATA',
+                                              as_index=False).agg(
+                                                      pd.Series.mean)
+        hour_files.append(hours_grouped)
+
+    return hour_files
+
 
 def compute_distances(latLonStations, gridPoints,
                       file_name="./climateChallengeData/distances.csv"):
@@ -249,9 +274,12 @@ def save_data_folder(X, y=None, direc="./data_for_models/", name_X="X.csv",
     if name_y is not None:
         y.to_csv(path.join(direc, name_y))
 
+def read_unofficial_data
+
 
 def prepare_data(include_distance=1, save_data=1, official_attr=OFFICIAL_ATTR,
-                 add_not_official=False, add_hourly_data=False):
+                 add_not_official=False, add_hourly_data=True,
+                 official_attr_hourly=OFFICIAL_ATTR_HOURLY):
 
     download_files()
     full_real = read_real_files()
@@ -262,16 +290,21 @@ def prepare_data(include_distance=1, save_data=1, official_attr=OFFICIAL_ATTR,
     compute_distances(official_stations_latlon, grid_points)
     create_idx(full_real)
 
-    df_full = official_station_daily_adder(
+    df_full = official_station_adder(
         official_attr,
         include_distance=include_distance, distances=grid_points).transform(
         full_real, official_stations_daily)
 
     if add_not_official:
-        unofficial_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
+        pass
 
     if add_hourly_data:
-        pass
+        official_stations_hourly = read_hourly_official()
+        df_full = official_station_adder(official_attr_hourly,
+                                         include_distance=False,
+                                         distances=None).transform(
+                                                 df_full,
+                                                 official_stations_hourly)
 
     y_columns = ['T_MEAN']
     x_columns = df_full.columns[df_full.columns != 'T_MEAN']
@@ -280,10 +313,9 @@ def prepare_data(include_distance=1, save_data=1, official_attr=OFFICIAL_ATTR,
     y = DataFrameSelector(y_columns).transform(df_full)
 
     X.drop(columns=['day', 'nx', 'ny', 'idx', 'LAT', 'LON', 'T_MIN', 'T_MAX'] +
-                   ['DATA_' + str(i) for i in
-                    range(len(official_stations_latlon))] +
-                   ['ESTACIO_' + str(i) for i in
-                    range(len(official_stations_latlon))], inplace=True)
+                   [i for i in X.columns if 'ESTACIO_' in i] +
+                   [i for i in X.columns if 'DATA_' in i],
+                   inplace=True)
 
     if save_data:
         save_data_folder(X, y, name_y="y.csv")

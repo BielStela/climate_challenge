@@ -25,7 +25,7 @@ OFFICIAL_ATTR_2 = [['DATA', 'Tm'],
                    ['DATA', 'Tm'],
                    ['DATA', 'Tm']]
 
-ROOT = "./climateChallengeData/results_task_2/"
+ROOT = "./submission/results_task_2/"
 
 
 def give_pred_format(X_test, y_pred, name, days):
