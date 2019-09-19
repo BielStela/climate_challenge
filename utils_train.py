@@ -20,6 +20,8 @@ from tqdm import tqdm
 import pickle
 from time import sleep
 
+from ax.core import SearchSpace, RangeParameter, ParameterType
+
 OFFICIAL_ATTR_2 = [['DATA', 'Tm'],
                    ['DATA', 'Tm'],
                    ['DATA', 'Tm'],
@@ -89,7 +91,12 @@ def load_results(name="./results.csv"):
         return df, 0
 
 
-def bo_loop():
+def bo_loop(df):
+    range_x = RangeParameter(name="x", lower=186, upper=333,
+                             parameter_type=ParameterType.INT)
+    range_y = RangeParameter(name="y", lower)
+    space = SearchSpace([
+            name])
     
 def classify_one_idx(X):
 
