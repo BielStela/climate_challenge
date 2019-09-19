@@ -33,28 +33,34 @@ import argparse
 np.random.seed(42)
 test_size = 0.2
 
-OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
-
-#OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
+#OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
 #                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h']]
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
+
+OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm', 'RS24h']]
 
 
 OFFICIAL_ATTR_HOURLY = [['DATA', 'T', 'TX', 'TN', 'HR', 'HRN',
                          'HRX', 'PPT', 'VVM10', 'DVM10', 'VVX10', 'DVVX10',
                          'Unnamed: 13'],
+                        ['DATA', 'T', 'Tx', 'Tn', 'HR', 'HRN', 'HRX'],
                         ['DATA', 'T', 'Tx', 'Tn', 'HR', 'HRn', 'HRx', 'PPT',
                          'VVM10', 'DVM10', 'VVX10', 'DVX10', 'RS'],
                         ['DATA', 'T', 'Tx', 'Tn', 'HR', 'HRn', 'HRx', 'PPT',
-                         'VVM10', 'DVM10', 'VVX10', 'DVX10', 'RS'],
-                        ['DATA', 'T', 'Tx', 'Tn', 'HR', 'HRN', 'HRX']]
+                         'VVM10', 'DVM10', 'VVX10', 'DVX10', 'RS']
+                        ]
+              
+UNOFFICIAL_ATTR = [['DATA', 'Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
+                    'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max',
+                    'Prec_Today', 'Prec_Year', 'Station']]
+
 # based on a threshold of 
 
 
@@ -114,7 +120,7 @@ class official_station_adder(BaseEstimator, TransformerMixin):
 
     def transform(self, X, y):
         # to_datetime functions is super slow if format is not supplied
-        self.full = X.copy()
+        self.full = X
         jj = len(self.full.columns)
         for i, j in tqdm(zip(self.attributes_to_add,
                              range(len(self.attributes_to_add))),
@@ -122,16 +128,16 @@ class official_station_adder(BaseEstimator, TransformerMixin):
             y[j]['DATA'] = pd.to_datetime(y[j]['DATA'],
                                           format="%Y-%m-%d", exact=True)
             y[j]['DATA'] = y[j]['DATA'].dt.strftime("%Y-%m-%d")
-            self.full = self.full.merge(y[j][i], how='inner',
+            self.full = pd.merge(self.full, y[j][i], how='inner',
                                         left_on='day', right_on='DATA',
                                         suffixes=("_" + str(jj), "_" +
                                                   str(jj+1)))
             jj += 1
 
         if self.include_distance:
-            create_idx(self.full)
-            self.full = self.full.merge(self.distances, how='inner',
-                                        left_on='idx', right_on='idx')
+            self.full = pd.merge(self.full, self.distances, how='inner',
+                                        left_on='idx', right_on='idx',
+                                        suffixes=("_0", "_1"))
 
         return self.full
 
@@ -274,12 +280,21 @@ def save_data_folder(X, y=None, direc="./data_for_models/", name_X="X.csv",
     if name_y is not None:
         y.to_csv(path.join(direc, name_y))
 
-def read_unofficial_data
 
+def read_unofficial_data():
+    unofficial = pd.read_excel("./climateChallengeData/data_NoOfficial.xlsx",
+                               delimiter=";")
+    unofficial['Date'] = pd.to_datetime(unofficial['Date'], format="%d/%m/%Y",
+                                        exact=True)
+    unofficial['DATA'] = unofficial['Date'].dt.strftime("%Y-%m-%d")
+    unofficial.drop(columns=['Date'], inplace=True)
+    return unofficial
+    
 
 def prepare_data(include_distance=1, save_data=1, official_attr=OFFICIAL_ATTR,
-                 add_not_official=False, add_hourly_data=True,
-                 official_attr_hourly=OFFICIAL_ATTR_HOURLY):
+                 add_not_official=True, add_hourly_data=True,
+                 official_attr_hourly=OFFICIAL_ATTR_HOURLY,
+                 nonofficial_attr=UNOFFICIAL_ATTR):
 
     download_files()
     full_real = read_real_files()
@@ -287,16 +302,41 @@ def prepare_data(include_distance=1, save_data=1, official_attr=OFFICIAL_ATTR,
     official_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
     grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
 
-    compute_distances(official_stations_latlon, grid_points)
+    grid_points_official = grid_points.copy()
+    compute_distances(official_stations_latlon, grid_points_official)
     create_idx(full_real)
 
     df_full = official_station_adder(
         official_attr,
-        include_distance=include_distance, distances=grid_points).transform(
+        include_distance=include_distance,
+        distances=grid_points_official).transform(
         full_real, official_stations_daily)
 
+    df_full.drop(columns=['nx', 'ny', 'LAT', 'LON', 'T_MIN', 'T_MAX'] +
+                         [i for i in df_full.columns if 'ESTACIO_' in i] +
+                         [i for i in df_full.columns if 'DATA_' in i],
+                 inplace=True)
+
+    # clean
+    del full_real, official_stations_latlon, official_stations_daily
+    del grid_points_official
+
     if add_not_official:
-        pass
+        non_official_stations_latlon = pd.read_csv("./climateChallengeData/noOfficialStations.csv")
+        grid_points_non_official = grid_points.copy()
+        compute_distances(non_official_stations_latlon,
+                          grid_points_non_official,
+                          file_name="./climateChallengeData/distances_noofficial.csv")
+        unofficial = read_unofficial_data()
+        df_full = official_station_adder(
+                nonofficial_attr,
+                include_distance=include_distance,
+                distances=grid_points_non_official).transform(
+                        df_full, [unofficial])
+    
+    # clean
+    del grid_points, unofficial, grid_points_non_official
+    del non_official_stations_latlon
 
     if add_hourly_data:
         official_stations_hourly = read_hourly_official()
@@ -312,9 +352,7 @@ def prepare_data(include_distance=1, save_data=1, official_attr=OFFICIAL_ATTR,
     X = DataFrameSelector(x_columns).transform(df_full)
     y = DataFrameSelector(y_columns).transform(df_full)
 
-    X.drop(columns=['day', 'nx', 'ny', 'idx', 'LAT', 'LON', 'T_MIN', 'T_MAX'] +
-                   [i for i in X.columns if 'ESTACIO_' in i] +
-                   [i for i in X.columns if 'DATA_' in i],
+    X.drop(columns=['day', 'idx'],
                    inplace=True)
 
     if save_data:
@@ -375,4 +413,4 @@ if __name__ == "__main__":
 
     prepare_data(include_distance=parsed.comp_dist,
                  save_data=parsed.save)
-    file_for_prediction_n_submission()
+    #file_for_prediction_n_submission()
