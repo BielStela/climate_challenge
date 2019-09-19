@@ -89,12 +89,9 @@ def load_results(name="./results.csv"):
         return df, 0
 
 
+def bo_loop():
+    
 def classify_one_idx(X):
-
-#    scaler = StandardScaler()
-#    X_t = scaler.fit_transform(
-#            X[X.columns[(X.columns != 'T_MEAN') &
-#                        (X.columns != 'idx') & (X.columns != 'day')]].values)
 
     X_t = X[X.columns[(X.columns != 'T_MEAN') &
                       (X.columns != 'idx') & (X.columns != 'day')]].values
@@ -116,10 +113,10 @@ def classify_one_idx(X):
     linear = LinearRegression(n_jobs=-1)
     linear.fit(X_t, y)
 
-    return np.mean(results), linear.coef_, linear.intercept_
+    return results, linear.coef_, linear.intercept_
 
 
-def give_n_points_n_weights(df, n_points=1, identifier='idx'):
+def give_n_points_n_weights(df, n_points=1, identifier='idx', method="mean"):
 
     # 0 for values of mse out of bag, 1 for coefs and 2 for intercept
     list_mins = [[], [], []]
@@ -127,16 +124,21 @@ def give_n_points_n_weights(df, n_points=1, identifier='idx'):
     list_ids = np.unique(df[identifier])
     for i in tqdm(list_ids):
         X = df[df[identifier] == i]
-        mean_error, coefs, intercepts = classify_one_idx(X)
-        for j, h in enumerate(list([mean_error, coefs, intercepts])):
+        errors, coefs, intercepts = classify_one_idx(X)
+        if method == "mean":
+            values = np.mean(errors)
+        elif method == "std":
+            values = np.std(errors)
+        for j, h in enumerate(list([values, coefs, intercepts])):
             list_mins[j].append(h)
 
-    new_points = list_ids[np.argpartition(list_mins[0], -n_points)[-n_points:]]
+        new_points = list_ids[np.argpartition(list_mins[0], -n_points)[-n_points:]]
     return new_points, list_mins[1], list_mins[2], list_ids, list_mins[0]
 
 
 def train_2nd_task_min_error(include_distance=False,
-                             official_attr=OFFICIAL_ATTR_2):
+                             official_attr=OFFICIAL_ATTR_2,
+                             method="mean"):
 
     full_real = read_real_files()
     official_stations_daily = read_official_stations()
@@ -153,7 +155,8 @@ def train_2nd_task_min_error(include_distance=False,
     df_full.drop(columns=['DATA_' + str(i) for i in
                           range(len(official_stations_latlon))], inplace=True)
 
-    new_points, coefs, intercepts, list_ids, errors = give_n_points_n_weights(df_full)
+    new_points, coefs, intercepts, list_ids, errors = give_n_points_n_weights(df_full,
+                                                                              method=method)
 
     full_coef_list = []
     full_intercept_list = []
@@ -177,7 +180,8 @@ def train_2nd_task_min_error(include_distance=False,
         df_full.drop(columns=['idx_' + str(i) for i in
                               range(count, count+1)], inplace=True)
 
-        new_points, coefs, intercepts, list_ids, errors = give_n_points_n_weights(df_full)
+        new_points, coefs, intercepts, list_ids, errors = give_n_points_n_weights(df_full,
+                                                                                  method=method)
         points.append(new_points)
         error_list.append(errors)
         if count in list([1, 2, 5, 10]):
