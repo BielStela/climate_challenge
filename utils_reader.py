@@ -370,7 +370,6 @@ def prepare_data(include_distance=0, save_data=1,
     if add_hourly_data:
         full = give_n_add_hourly(prev_data=None,
                                  official_attr_hourly=official_attr_hourly)
-
     y_columns = ['T_MEAN']
     x_columns = full.columns[full.columns != 'T_MEAN']
 
@@ -420,6 +419,8 @@ def add_official(prev_data, include_distance=None, official_attr=None,
         compute_distances(official_stations_latlon, grid)
 
     official_stations_daily = read_official_stations()
+    print(official_stations_daily[0]['DATA'].type)
+    print(prev_data['day'].type)
 
     X_complete = official_station_adder(
         official_attr,
@@ -463,6 +464,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parsed = parse_arguments(parser)
 
-    prepare_data(include_distance=parsed.comp_dist,
-                 save_data=parsed.save)
-    #file_for_prediction_n_submission()
+#    prepare_data(include_distance=parsed.comp_dist,
+#                 save_data=parsed.save,
+#                 add_not_official=parsed.no_official)
+    file_for_prediction_n_submission()
