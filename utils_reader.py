@@ -408,6 +408,9 @@ def prepare_file_sub():
                                       'ny': grid_points['ny'].values})
             final_df.append(sample_df)
     final_df = pd.concat(final_df, ignore_index=True, sort=False)
+    final_df['day'] = pd.to_datetime(final_df['day'],
+                                  format="%d/%m/%Y", exact=True)
+    final_df['day'] = final_df['day'].dt.strftime("%Y-%m-%d")
     return final_df, grid_points
 
 
@@ -419,20 +422,18 @@ def add_official(prev_data, include_distance=None, official_attr=None,
         compute_distances(official_stations_latlon, grid)
 
     official_stations_daily = read_official_stations()
-    print(official_stations_daily[0]['DATA'].type)
-    print(prev_data['day'].type)
 
-    X_complete = official_station_adder(
-        official_attr,
-        include_distance=include_distance, distances=grid).transform(
+    adder = official_station_adder(official_attr,
+                                   include_distance=False,
+                                   distances=grid)
+    X_complete = adder.transform(
         prev_data, official_stations_daily)
 
     X_complete.drop(columns=['nx', 'ny'] +
-                    ['DATA_' + str(i) for i in
-                     range(len(official_stations_latlon))] +
-                    ['ESTACIO_' + str(i) for i in
-                     range(len(official_stations_latlon))], inplace=True)
-
+                            [i for i in X_complete.columns if 'ESTACIO_' in i] + 
+                            [i for i in X_complete.columns if 'DATA_' in i],
+                    inplace=True)
+    print(X_complete.columns)
     return X_complete
 
 
@@ -444,7 +445,7 @@ def file_for_prediction_n_submission(include_distance=True,
                                      official_attr_hourly=OFFICIAL_ATTR_HOURLY):
 
     df, grid = prepare_file_sub()
-
+    
     full = add_official(df, include_distance=include_distance,
                         official_attr=official_attr, grid=grid)
 
