@@ -299,66 +299,83 @@ def read_unofficial_data(day=6):
     return unofficial
 
 
-def prepare_data(include_distance=0, save_data=1, official_attr=OFFICIAL_ATTR,
-                 add_not_official=True, add_hourly_data=False,
-                 official_attr_hourly=OFFICIAL_ATTR_HOURLY,
-                 nonofficial_attr=UNOFFICIAL_ATTR):
-
-    download_files()
+def give_basic_dataset(include_distance=0, official_attr=None):
     full_real = read_real_files()
     official_stations_daily = read_official_stations()
 
     if include_distance:
         official_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
         grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
-        grid_points_official = grid_points.copy()
-        compute_distances(official_stations_latlon, grid_points_official)
+        compute_distances(official_stations_latlon, grid_points)
         create_idx(full_real)
     else:
-        grid_points_official = None
+        grid_points = None
 
     df_full = official_station_adder(
         official_attr,
         include_distance=include_distance,
-        distances=grid_points_official).transform(
+        distances=grid_points).transform(
         full_real, official_stations_daily)
 
     df_full.drop(columns=['nx', 'ny', 'LAT', 'LON', 'T_MIN', 'T_MAX'] +
                          [i for i in df_full.columns if 'ESTACIO_' in i] +
                          [i for i in df_full.columns if 'DATA_' in i],
                  inplace=True)
+    return df_full
 
-    if add_not_official:
-        if include_distance:
-            non_official_stations_latlon = pd.read_csv("./climateChallengeData/noOfficialStations.csv")
-            grid_points_non_official = grid_points.copy()
-            compute_distances(non_official_stations_latlon,
-                              grid_points_non_official,
-                              file_name="./climateChallengeData/distances_noofficial.csv")
-        else:
-            grid_points_non_official = None
+
+def give_n_add_nonoff_dataset(include_distance=0, prev_data=None,
+                              nonofficial_attr=None):
+    if include_distance:
+        non_official_stations_latlon = pd.read_csv("./climateChallengeData/noOfficialStations.csv")
+        grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
+        compute_distances(non_official_stations_latlon,
+                          grid_points,
+                          file_name="./climateChallengeData/distances_noofficial.csv")
+    else:
+        grid_points_non_official = None
         unofficial = read_unofficial_data()
         df_full = official_station_adder(
                 nonofficial_attr,
                 include_distance=include_distance,
                 distances=grid_points_non_official).transform(
-                        df_full, [unofficial])
+                        prev_data, [unofficial])
 
+    return df_full
+
+
+def give_n_add_hourly(prev_data=None, official_attr_hourly=None):
+    official_stations_hourly = read_hourly_official()
+    df_full = official_station_adder(official_attr_hourly,
+                                     include_distance=False,
+                                     distances=None).transform(
+                                             prev_data,
+                                             official_stations_hourly)
+    return df_full
+
+
+def prepare_data(include_distance=0, save_data=1,
+                 add_not_official=True, add_hourly_data=False,
+                 official_attr_hourly=OFFICIAL_ATTR_HOURLY,
+                 nonofficial_attr=UNOFFICIAL_ATTR,
+                 official_attr=OFFICIAL_ATTR):
+
+    download_files()
+    full = give_basic_dataset(include_distance=include_distance,
+                              official_attr=official_attr)
+    if add_not_official:
+        full = give_n_add_nonoff_dataset(include_distance=include_distance,
+                                         nonofficial_attr=nonofficial_attr,
+                                         prev_data=full)
     if add_hourly_data:
-        official_stations_hourly = read_hourly_official()
-        df_full = official_station_adder(official_attr_hourly,
-                                         include_distance=False,
-                                         distances=None).transform(
-                                                 df_full,
-                                                 official_stations_hourly)
-
-    df_full.to_csv("./data_for_models/full_wnon.csv")
+        full = give_n_add_hourly(prev_data=None,
+                                 official_attr_hourly=official_attr_hourly)
 
     y_columns = ['T_MEAN']
-    x_columns = df_full.columns[df_full.columns != 'T_MEAN']
+    x_columns = full.columns[full.columns != 'T_MEAN']
 
-    X = DataFrameSelector(x_columns).transform(df_full)
-    y = DataFrameSelector(y_columns).transform(df_full)
+    X = DataFrameSelector(x_columns).transform(full)
+    y = DataFrameSelector(y_columns).transform(full)
 
     X.drop(columns=['day', 'idx'],
            inplace=True)

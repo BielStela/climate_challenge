@@ -20,7 +20,8 @@ from tqdm import tqdm
 import pickle
 from time import sleep
 
-from ax.core import SearchSpace, RangeParameter, ParameterType
+from ax.core import SearchSpace, ChoiceParameter, ParameterType, Experiment
+from ax import Models
 
 OFFICIAL_ATTR_2 = [['DATA', 'Tm'],
                    ['DATA', 'Tm'],
@@ -91,13 +92,22 @@ def load_results(name="./results.csv"):
         return df, 0
 
 
-def bo_loop(df):
-    range_x = RangeParameter(name="x", lower=186, upper=333,
-                             parameter_type=ParameterType.INT)
-    range_y = RangeParameter(name="y", lower)
-    space = SearchSpace([
-            name])
-    
+def bo_loop(df, nx, ny):
+    range_x = ChoiceParameter(name='x', values=set(map(str, nx)),
+                              parameter_type=ParameterType.STRING)
+    range_y = ChoiceParameter(name="y", values=set(map(str, ny)),
+                              parameter_type=ParameterType.STRING)
+    space = SearchSpace(parameters=[range_x, range_y])
+
+    experiment = Experiment(name="experiment_one_cell",
+                            search_space=space)
+
+    sobol = Models.SOBOL(search_space=experiment.search_space)
+    generator_run = sobol.gen(100)
+
+    for arm in generator_run.arms:
+        print(arm)
+
 def classify_one_idx(X):
 
     X_t = X[X.columns[(X.columns != 'T_MEAN') &
@@ -139,7 +149,8 @@ def give_n_points_n_weights(df, n_points=1, identifier='idx', method="mean"):
         for j, h in enumerate(list([values, coefs, intercepts])):
             list_mins[j].append(h)
 
-        new_points = list_ids[np.argpartition(list_mins[0], -n_points)[-n_points:]]
+        new_points = list_ids[np.argpartition(list_mins[0],
+                                              -n_points)[-n_points:]]
     return new_points, list_mins[1], list_mins[2], list_ids, list_mins[0]
 
 
