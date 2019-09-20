@@ -64,10 +64,9 @@ def add_df(entry, attr, other="official"):
     else:
         the_other = read_hourly_official()
 
-    df = official_station_adder(attr,
-                                include_distance=None,
-                                distances=None).transform(entry,
-                                                          the_other)
+    adder = official_station_adder(attr, include_distance=None,
+                                   distances=None)
+    df = adder.transform(entry, the_other)
     return df
 
 

@@ -115,7 +115,7 @@ class official_station_adder(BaseEstimator, TransformerMixin):
     def transform(self, X, y):
         # to_datetime functions is super slow if format is not supplied
         self.full = X
-        jj = len(self.full.columns)
+
         for i, j in tqdm(zip(self.attributes_to_add,
                              range(len(self.attributes_to_add))),
                          total=len(self.attributes_to_add)):
@@ -124,9 +124,8 @@ class official_station_adder(BaseEstimator, TransformerMixin):
             y[j]['DATA'] = y[j]['DATA'].dt.strftime("%Y-%m-%d")
             self.full = pd.merge(self.full, y[j][i], how='inner',
                                  left_on='day', right_on='DATA',
-                                 suffixes=("_" + str(jj), "_" +
-                                           str(jj+1)))
-            jj += 1
+                                 suffixes=("_0", "_1"))
+            
 
         if self.include_distance:
             self.full = pd.merge(self.full, self.distances, how='inner',
@@ -198,6 +197,10 @@ def read_hourly_official(direc="./climateChallengeData/data_hours"):
         hours_grouped = file_filtered.groupby('DATA',
                                               as_index=False).agg(
                                                       pd.Series.mean)
+        file['DATA'] = pd.to_datetime(file['DATA'],
+                                      format="%Y-%m-%d",
+                                      exact=True)
+        file['DATA'] = file['DATA'].dt.strftime("%Y-%m-%d")
         hour_files.append(hours_grouped)
 
     return hour_files
