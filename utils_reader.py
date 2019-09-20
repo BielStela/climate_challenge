@@ -29,6 +29,9 @@ import numpy as np
 import geopy.distance as distance
 from tqdm import tqdm as tqdm
 import argparse
+from sklearn.impute import SimpleImputer
+from sklearn.decomposition import PCA
+
 
 np.random.seed(42)
 test_size = 0.2
@@ -284,16 +287,16 @@ def download_files(direc="./climateChallengeData/"):
         print("Data already downloaded")
 
 
-def save_data_folder(X, y=None, direc="./data_for_models/", name_X="X.pkl",
+def save_data_folder(X, y=None, direc="./data_for_models/",
+                     name_X="X.parquet.gzip",
                      name_y=None):
 
     if not path.exists(direc):
         mkdir(direc)
 
-    
-    X.to_pickle(path.join(direc, name_X))
+    X.to_parquet(path.join(direc, name_X), compression='gzip')
     if name_y is not None:
-        y.to_pickle(path.join(direc, name_y))
+        y.to_parquet(path.join(direc, name_y), compression='gzip')
 
 
 def read_unofficial_data(day=6):
@@ -334,26 +337,6 @@ def give_basic_dataset(include_distance=0, official_attr=None):
     return df_full
 
 
-def give_n_add_nonoff_dataset(include_distance=0, prev_data=None,
-                              nonofficial_attr=None):
-    if include_distance:
-        non_official_stations_latlon = pd.read_csv("./climateChallengeData/noOfficialStations.csv")
-        grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
-        compute_distances(non_official_stations_latlon,
-                          grid_points,
-                          file_name="./climateChallengeData/distances_noofficial.csv")
-    else:
-        grid_points_non_official = None
-        unofficial = read_unofficial_data()
-        df_full = official_station_adder(
-                nonofficial_attr,
-                include_distance=include_distance,
-                distances=grid_points_non_official).transform(
-                        prev_data, [unofficial])
-
-    return df_full
-
-
 def input_(X):
     imputer = SimpleImputer(strategy='median')
     X_t = imputer.fit_transform(X.values)
@@ -377,8 +360,30 @@ def result_pca(df, threshold=0.97):
     X_t = input_(X)
     pca = PCA(n_components=threshold)
     X_n = pca.fit_transform(X_t)
-    
+    new = pd.DataFrame(data=X_n)
+    full = pd.concat([full_a, new], ignore_index=True)
     return full
+
+
+def give_n_add_nonoff_dataset(include_distance=0, prev_data=None,
+                              nonofficial_attr=None):
+    if include_distance:
+        non_official_stations_latlon = pd.read_csv("./climateChallengeData/noOfficialStations.csv")
+        grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
+        compute_distances(non_official_stations_latlon,
+                          grid_points,
+                          file_name="./climateChallengeData/distances_noofficial.csv")
+    else:
+        grid_points_non_official = None
+        unofficial = read_unofficial_data()
+        df_full = official_station_adder(
+                nonofficial_attr,
+                include_distance=include_distance,
+                distances=grid_points_non_official).transform(
+                        prev_data, [unofficial])
+
+    return df_full
+
 
 def prepare_data(include_distance=0, save_data=1,
                  add_not_official=False, add_hourly_data=False,
@@ -391,14 +396,21 @@ def prepare_data(include_distance=0, save_data=1,
     full = give_basic_dataset(include_distance=include_distance,
                               official_attr=official_attr)
 
-    
+    full = result_pca(full)
+
     if add_not_official:
         full = give_n_add_nonoff_dataset(include_distance=include_distance,
                                          nonofficial_attr=nonofficial_attr,
                                          prev_data=full)
+
+        full = result_pca(full)
+
     if add_hourly_data:
         full = give_n_add_hourly(prev_data=full,
                                  official_attr_hourly=official_attr_hourly)
+
+        full = result_pca(full)
+
     y_columns = ['T_MEAN']
     x_columns = full.columns[full.columns != 'T_MEAN']
 
@@ -411,82 +423,11 @@ def prepare_data(include_distance=0, save_data=1,
         X.drop(columns=['idx'], inplace=True)
 
     if save_data:
-        save_data_folder(X, y, name_y="y.pkl")
-        full.to_pickle("./data_for_models/full.pkl")
+        save_data_folder(X, y, name_y="y.parquet.gzip")
+        full.to_parquet("./data_for_models/full.parquet.gzip",
+                        compression='gzip')
     else:
         return X, y
-
-
-def prepare_file_sub():
-    real_2016 = pd.read_csv("./climateChallengeData/real/real_2016.csv",
-                            index_col=None)
-    real_2016 = real_2016.groupby('day',
-                                  as_index=False).agg({'T_MEAN': 'mean'})
-    real_2016.columns = ['date', 'mean']
-    real_2016.to_pickle("./data_for_models/sub_partial.pkl")
-    grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
-
-    final_df = []
-    data_ranges = pd.date_range(start='01/01/2016', end='31/12/2016')
-    data_days = data_ranges.dayofyear - 1
-    for i, j in zip(data_ranges, data_days):
-        if i.day > 5:
-            dates = np.repeat(i, len(grid_points))
-            days = np.repeat(j, len(grid_points))
-            sample_df = pd.DataFrame({'day': dates, 'ndays': days,
-                                      'nx': grid_points['nx'].values,
-                                      'ny': grid_points['ny'].values})
-            final_df.append(sample_df)
-    final_df = pd.concat(final_df, ignore_index=True, sort=False)
-    final_df['day'] = pd.to_datetime(final_df['day'],
-                                  format="%d/%m/%Y", exact=True)
-    final_df['day'] = final_df['day'].dt.strftime("%Y-%m-%d")
-    return final_df, grid_points
-
-
-def add_official(prev_data, include_distance=None, official_attr=None,
-                 grid=None):
-    if include_distance:
-        official_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
-        create_idx(prev_data)
-        compute_distances(official_stations_latlon, grid)
-
-    official_stations_daily = read_official_stations()
-
-    adder = official_station_adder(official_attr,
-                                   include_distance=False,
-                                   distances=grid)
-    X_complete = adder.transform(
-        prev_data, official_stations_daily)
-
-    X_complete.drop(columns=['nx', 'ny'] +
-                            [i for i in X_complete.columns if 'ESTACIO_' in i] + 
-                            [i for i in X_complete.columns if 'DATA_' in i],
-                    inplace=True)
-    return X_complete
-
-
-def file_for_prediction_n_submission(include_distance=False,
-                                     official_attr=OFFICIAL_ATTR,
-                                     add_hourly_data=False,
-                                     add_nonofficial=False,
-                                     nonofficial_attr=UNOFFICIAL_ATTR,
-                                     official_attr_hourly=OFFICIAL_ATTR_HOURLY):
-
-    df, grid = prepare_file_sub()
-    
-    full = add_official(df, include_distance=include_distance,
-                        official_attr=official_attr, grid=grid)
-
-    if add_nonofficial:
-        full = give_n_add_nonoff_dataset(include_distance=include_distance,
-                                         nonofficial_attr=nonofficial_attr,
-                                         prev_data=full)
-    if add_hourly_data:
-        full = give_n_add_hourly(prev_data=full,
-                                 official_attr_hourly=official_attr_hourly)
-
-    save_data_folder(full, name_X="for_submission.pkl")
 
 
 if __name__ == "__main__":
