@@ -11,7 +11,7 @@ from pandas import read_csv, DataFrame
 from sklearn.preprocessing import StandardScaler, Imputer
 import pandas as pd
 from utils_reader import read_real_files, read_official_stations, create_idx
-from utils_reader import official_station_daily_adder
+from utils_reader import official_station_adder
 import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.linear_model import LinearRegression
@@ -19,6 +19,7 @@ from sklearn.metrics import mean_squared_error
 from tqdm import tqdm 
 import pickle
 from time import sleep
+from utils_submission import create_partial
 
 from ax.core import SearchSpace, ChoiceParameter, ParameterType, Experiment
 from ax import Models
@@ -36,8 +37,9 @@ def give_pred_format(X_test, y_pred, name, days):
     df['date'] = pd.to_datetime(df['date'], format="%Y-%m-%d", exact=True)
     df = df.groupby('date', as_index=False).agg({'mean': 'mean'})
     df['date'] = df['date'].dt.strftime("%d/%m/%Y")
-    df_partial = pd.read_pickle("./data_for_models/sub_partial.pkl",
-                                index_col=0)
+    if not path.exists("./data_for_models/sub_partial.csv"):
+        create_partial()
+    df_partial = pd.read_csv("./data_for_models/sub_partial.csv")
     df_partial['date'] = pd.to_datetime(df_partial['date'], format="%d/%m/%Y",
                                         exact=True)
     df_partial['date'] = df_partial['date'].dt.strftime("%d/%m/%Y")
@@ -166,7 +168,7 @@ def train_2nd_task_min_error(include_distance=False,
     full_real.drop(columns=['ndays', 'T_MIN', 'T_MAX',
                             'LAT', 'LON', 'nx', 'ny'], inplace=True)
 
-    df_full = official_station_daily_adder(
+    df_full = official_station_adder(
         official_attr,
         include_distance=include_distance).transform(
         full_real, official_stations_daily)

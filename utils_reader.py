@@ -44,8 +44,6 @@ OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
                  ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
                   'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
 
-
-
 OFFICIAL_ATTR_HOURLY = [['DATA', 'T', 'TX', 'TN', 'HR', 'HRN',
                          'HRX', 'PPT', 'VVM10', 'DVM10', 'VVX10', 'DVVX10',
                          'Unnamed: 13'],
@@ -345,7 +343,7 @@ def result_pca(df, threshold=0.97):
                                                   len(X.columns) +
                                                   len(X_n[0, :]))]
     new = pd.DataFrame(data=X_n, columns=columns)
-    full = pd.concat([full_a, new], ignore_index=True)
+    full = pd.concat([full_a, new], ignore_index=False, axis=1)
     return full
 
 
@@ -390,13 +388,15 @@ def prepare_data(include_distance=0, save_data=1,
         if with_pca:
             full = result_pca(full)
             
-    print(full.columns)
+    print(full.info())
 
     if add_hourly_data:
         full = give_n_add_hourly(prev_data=full,
                                  official_attr_hourly=official_attr_hourly)
+        print(full.info())
         if with_pca:
             full = result_pca(full)
+        
 
     y_columns = ['T_MEAN']
     x_columns = full.columns[full.columns != 'T_MEAN']
