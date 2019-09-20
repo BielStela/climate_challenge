@@ -33,13 +33,13 @@ import argparse
 np.random.seed(42)
 test_size = 0.2
 
-#OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
+OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
 
 
 
@@ -59,13 +59,13 @@ UNOFFICIAL_ATTR = [['DATA', 'Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
 
 # based on threshold correlation +-0.30
 
-OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO',
-                  'RS24h', 'DVum6', 'DVx6'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO',
-                  'RS24h', 'DVum10', 'DVx10'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm',
-                  'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
+#OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO',
+#                  'RS24h', 'DVum6', 'DVx6'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO',
+#                  'RS24h', 'DVum10', 'DVx10'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm',
+#                  'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
 
 def parse_arguments(parser):
     parser.add_argument("-d", dest="comp_dist",
@@ -355,7 +355,7 @@ def give_n_add_hourly(prev_data=None, official_attr_hourly=None):
 
 
 def prepare_data(include_distance=0, save_data=1,
-                 add_not_official=True, add_hourly_data=False,
+                 add_not_official=False, add_hourly_data=False,
                  official_attr_hourly=OFFICIAL_ATTR_HOURLY,
                  nonofficial_attr=UNOFFICIAL_ATTR,
                  official_attr=OFFICIAL_ATTR):
@@ -377,8 +377,10 @@ def prepare_data(include_distance=0, save_data=1,
     X = DataFrameSelector(x_columns).transform(full)
     y = DataFrameSelector(y_columns).transform(full)
 
-    X.drop(columns=['day', 'idx'],
+    X.drop(columns=['day'],
            inplace=True)
+    if include_distance:
+        X.drop(columns=['idx'], inplace=True)
 
     if save_data:
         save_data_folder(X, y, name_y="y.csv")
@@ -386,18 +388,14 @@ def prepare_data(include_distance=0, save_data=1,
         return X, y
 
 
-def file_for_prediction_n_submission(include_distance=True,
-                                     official_attr=OFFICIAL_ATTR):
-
+def prepare_file_sub():
     real_2016 = pd.read_csv("./climateChallengeData/real/real_2016.csv",
                             index_col=None)
     real_2016 = real_2016.groupby('day',
                                   as_index=False).agg({'T_MEAN': 'mean'})
     real_2016.columns = ['date', 'mean']
     real_2016.to_csv("./data_for_models/sub_partial.csv")
-
     grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
-    official_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
 
     final_df = []
     data_ranges = pd.date_range(start='01/01/2016', end='31/12/2016')
@@ -411,24 +409,53 @@ def file_for_prediction_n_submission(include_distance=True,
                                       'ny': grid_points['ny'].values})
             final_df.append(sample_df)
     final_df = pd.concat(final_df, ignore_index=True, sort=False)
+    return final_df, grid_points
 
-    create_idx(final_df)
-    compute_distances(official_stations_latlon, grid_points)
+
+def add_official(prev_data, include_distance=None, official_attr=None,
+                 grid=None):
+    if include_distance:
+        official_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
+        create_idx(prev_data)
+        compute_distances(official_stations_latlon, grid)
 
     official_stations_daily = read_official_stations()
 
     X_complete = official_station_adder(
         official_attr,
-        include_distance=include_distance, distances=grid_points).transform(
-        final_df, official_stations_daily)
+        include_distance=include_distance, distances=grid).transform(
+        prev_data, official_stations_daily)
 
-    X_complete.drop(columns=['nx', 'ny', 'idx'] +
+    X_complete.drop(columns=['nx', 'ny'] +
                     ['DATA_' + str(i) for i in
                      range(len(official_stations_latlon))] +
                     ['ESTACIO_' + str(i) for i in
                      range(len(official_stations_latlon))], inplace=True)
 
-    save_data_folder(X_complete, name_X="for_submission.csv")
+    return X_complete
+
+
+def file_for_prediction_n_submission(include_distance=True,
+                                     official_attr=OFFICIAL_ATTR,
+                                     add_hourly_data=False,
+                                     add_nonofficial=False,
+                                     nonofficial_attr=UNOFFICIAL_ATTR,
+                                     official_attr_hourly=OFFICIAL_ATTR_HOURLY):
+
+    df, grid = prepare_file_sub()
+
+    full = add_official(df, include_distance=include_distance,
+                        official_attr=official_attr, grid=grid)
+
+    if add_nonofficial:
+        full = give_n_add_nonoff_dataset(include_distance=include_distance,
+                                         nonofficial_attr=nonofficial_attr,
+                                         prev_data=full)
+    if add_hourly_data:
+        full = give_n_add_hourly(prev_data=None,
+                                 official_attr_hourly=official_attr_hourly)
+
+    save_data_folder(full, name_X="for_submission.csv")
 
 
 if __name__ == "__main__":
