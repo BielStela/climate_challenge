@@ -36,13 +36,13 @@ from sklearn.decomposition import PCA
 np.random.seed(42)
 test_size = 0.2
 
-#OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
+OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
 
 
 
@@ -57,27 +57,8 @@ OFFICIAL_ATTR_HOURLY = [['DATA', 'T', 'TX', 'TN', 'HR', 'HRN',
                         ]
 
 UNOFFICIAL_ATTR = [['DATA', 'Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
-                    'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max',
-                    'Prec_Today', 'Prec_Year', 'Station']]
+                    'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max']]
 
-# based on threshold correlation +-0.30
-
-#OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO',
-#                  'RS24h', 'DVum6', 'DVx6'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO',
-#                  'RS24h', 'DVum10', 'DVx10'],
-#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm',
-#                  'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
-                 
-UNOFFICIAL_ATTR = [['DATA', 'Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
-                    'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max',
-                    'Prec_Today', 'Prec_Year']]
-
-OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO']]
 
 def parse_arguments(parser):
     parser.add_argument("-d", dest="comp_dist",
@@ -381,7 +362,8 @@ def give_n_add_nonoff_dataset(include_distance=0, prev_data=None,
                 include_distance=include_distance,
                 distances=grid_points_non_official).transform(
                         prev_data, [unofficial])
-
+    
+    df_full.drop(columns=['DATA'])
     return df_full
 
 
@@ -402,14 +384,14 @@ def prepare_data(include_distance=0, save_data=1,
         full = give_n_add_nonoff_dataset(include_distance=include_distance,
                                          nonofficial_attr=nonofficial_attr,
                                          prev_data=full)
-
-        full = result_pca(full)
+        if with_pca:
+            full = result_pca(full)
 
     if add_hourly_data:
         full = give_n_add_hourly(prev_data=full,
                                  official_attr_hourly=official_attr_hourly)
-
-        full = result_pca(full)
+        if with_pca:
+            full = result_pca(full)
 
     y_columns = ['T_MEAN']
     x_columns = full.columns[full.columns != 'T_MEAN']
@@ -438,5 +420,6 @@ if __name__ == "__main__":
     prepare_data(include_distance=parsed.comp_dist,
                  save_data=parsed.save,
                  add_not_official=parsed.no_official,
-                 add_hourly_data=False)
+                 add_hourly_data=False,
+                 with_pca=True)
 #    file_for_prediction_n_submission()
