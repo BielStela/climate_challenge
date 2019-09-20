@@ -36,7 +36,8 @@ def give_pred_format(X_test, y_pred, name, days):
     df['date'] = pd.to_datetime(df['date'], format="%Y-%m-%d", exact=True)
     df = df.groupby('date', as_index=False).agg({'mean': 'mean'})
     df['date'] = df['date'].dt.strftime("%d/%m/%Y")
-    df_partial = pd.read_csv("./data_for_models/sub_partial.csv", index_col=0)
+    df_partial = pd.read_pickle("./data_for_models/sub_partial.pkl",
+                                index_col=0)
     df_partial['date'] = pd.to_datetime(df_partial['date'], format="%d/%m/%Y",
                                         exact=True)
     df_partial['date'] = df_partial['date'].dt.strftime("%d/%m/%Y")

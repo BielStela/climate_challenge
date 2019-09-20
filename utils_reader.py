@@ -33,13 +33,13 @@ import argparse
 np.random.seed(42)
 test_size = 0.2
 
-OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
+#OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
+#                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
+#                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
 
 
 
@@ -66,6 +66,15 @@ UNOFFICIAL_ATTR = [['DATA', 'Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
 #                  'RS24h', 'DVum10', 'DVx10'],
 #                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm',
 #                  'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
+                 
+UNOFFICIAL_ATTR = [['DATA', 'Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
+                    'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max',
+                    'Prec_Today', 'Prec_Year']]
+
+OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO']]
 
 def parse_arguments(parser):
     parser.add_argument("-d", dest="comp_dist",
@@ -275,15 +284,16 @@ def download_files(direc="./climateChallengeData/"):
         print("Data already downloaded")
 
 
-def save_data_folder(X, y=None, direc="./data_for_models/", name_X="X.csv",
+def save_data_folder(X, y=None, direc="./data_for_models/", name_X="X.pkl",
                      name_y=None):
 
     if not path.exists(direc):
         mkdir(direc)
 
-    X.to_csv(path.join(direc, name_X))
+    
+    X.to_pickle(path.join(direc, name_X))
     if name_y is not None:
-        y.to_csv(path.join(direc, name_y))
+        y.to_pickle(path.join(direc, name_y))
 
 
 def read_unofficial_data(day=6):
@@ -344,6 +354,12 @@ def give_n_add_nonoff_dataset(include_distance=0, prev_data=None,
     return df_full
 
 
+def input_(X):
+    imputer = SimpleImputer(strategy='median')
+    X_t = imputer.fit_transform(X.values)
+    return X_t
+
+
 def give_n_add_hourly(prev_data=None, official_attr_hourly=None):
     official_stations_hourly = read_hourly_official()
     df_full = official_station_adder(official_attr_hourly,
@@ -354,21 +370,34 @@ def give_n_add_hourly(prev_data=None, official_attr_hourly=None):
     return df_full
 
 
+def result_pca(df, threshold=0.97):
+    full_a = df.loc[:, ['day', 'T_MEAN']]
+    X = df.loc[:,
+               df.columns[(df.columns != 'T_MEAN') & (df.columns != 'day')]]
+    X_t = input_(X)
+    pca = PCA(n_components=threshold)
+    X_n = pca.fit_transform(X_t)
+    
+    return full
+
 def prepare_data(include_distance=0, save_data=1,
                  add_not_official=False, add_hourly_data=False,
                  official_attr_hourly=OFFICIAL_ATTR_HOURLY,
                  nonofficial_attr=UNOFFICIAL_ATTR,
-                 official_attr=OFFICIAL_ATTR):
+                 official_attr=OFFICIAL_ATTR,
+                 with_pca=True):
 
     download_files()
     full = give_basic_dataset(include_distance=include_distance,
                               official_attr=official_attr)
+
+    
     if add_not_official:
         full = give_n_add_nonoff_dataset(include_distance=include_distance,
                                          nonofficial_attr=nonofficial_attr,
                                          prev_data=full)
     if add_hourly_data:
-        full = give_n_add_hourly(prev_data=None,
+        full = give_n_add_hourly(prev_data=full,
                                  official_attr_hourly=official_attr_hourly)
     y_columns = ['T_MEAN']
     x_columns = full.columns[full.columns != 'T_MEAN']
@@ -382,7 +411,8 @@ def prepare_data(include_distance=0, save_data=1,
         X.drop(columns=['idx'], inplace=True)
 
     if save_data:
-        save_data_folder(X, y, name_y="y.csv")
+        save_data_folder(X, y, name_y="y.pkl")
+        full.to_pickle("./data_for_models/full.pkl")
     else:
         return X, y
 
@@ -393,7 +423,7 @@ def prepare_file_sub():
     real_2016 = real_2016.groupby('day',
                                   as_index=False).agg({'T_MEAN': 'mean'})
     real_2016.columns = ['date', 'mean']
-    real_2016.to_csv("./data_for_models/sub_partial.csv")
+    real_2016.to_pickle("./data_for_models/sub_partial.pkl")
     grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
 
     final_df = []
@@ -433,11 +463,10 @@ def add_official(prev_data, include_distance=None, official_attr=None,
                             [i for i in X_complete.columns if 'ESTACIO_' in i] + 
                             [i for i in X_complete.columns if 'DATA_' in i],
                     inplace=True)
-    print(X_complete.columns)
     return X_complete
 
 
-def file_for_prediction_n_submission(include_distance=True,
+def file_for_prediction_n_submission(include_distance=False,
                                      official_attr=OFFICIAL_ATTR,
                                      add_hourly_data=False,
                                      add_nonofficial=False,
@@ -454,10 +483,10 @@ def file_for_prediction_n_submission(include_distance=True,
                                          nonofficial_attr=nonofficial_attr,
                                          prev_data=full)
     if add_hourly_data:
-        full = give_n_add_hourly(prev_data=None,
+        full = give_n_add_hourly(prev_data=full,
                                  official_attr_hourly=official_attr_hourly)
 
-    save_data_folder(full, name_X="for_submission.csv")
+    save_data_folder(full, name_X="for_submission.pkl")
 
 
 if __name__ == "__main__":
@@ -465,7 +494,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parsed = parse_arguments(parser)
 
-#    prepare_data(include_distance=parsed.comp_dist,
-#                 save_data=parsed.save,
-#                 add_not_official=parsed.no_official)
-    file_for_prediction_n_submission()
+    prepare_data(include_distance=parsed.comp_dist,
+                 save_data=parsed.save,
+                 add_not_official=parsed.no_official,
+                 add_hourly_data=False)
+#    file_for_prediction_n_submission()
