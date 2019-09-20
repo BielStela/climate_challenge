@@ -341,7 +341,10 @@ def result_pca(df, threshold=0.97):
     X_t = input_(X)
     pca = PCA(n_components=threshold)
     X_n = pca.fit_transform(X_t)
-    new = pd.DataFrame(data=X_n)
+    columns = ["Feature_" + str(i) for i in range(len(X.columns),
+                                                  len(X.columns) +
+                                                  len(X_n[0, :]))]
+    new = pd.DataFrame(data=X_n, columns=columns)
     full = pd.concat([full_a, new], ignore_index=True)
     return full
 
@@ -386,6 +389,8 @@ def prepare_data(include_distance=0, save_data=1,
                                          prev_data=full)
         if with_pca:
             full = result_pca(full)
+            
+    print(full.columns)
 
     if add_hourly_data:
         full = give_n_add_hourly(prev_data=full,
