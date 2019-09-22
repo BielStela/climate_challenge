@@ -146,11 +146,15 @@ def second_frame(mode='train'):
 
 if __name__ == "__main__":
     threshold = 0.97
+    # retorna X=X_train, y=y_train
     X, y, pca, imputer, scaler, features = first_frame(threshold=threshold)
+    #aquest es Xpred
     X_pred, _, days = first_frame(mode="predict", imputer=imputer,
                                   scaler=scaler, pca=pca,
                                   threshold=threshold, features=features)
-#    y_pred = predict_with_lgbm(X_pred, X, y)
-#    give_pred_format(X_pred, y_pred, "./submission/lgbm.csv", days)
+    # prediu ambn lgbm
+    y_pred = predict_with_lgbm(X_pred, X, y)
+    #dona la predicció amb format d'entrega
+    give_pred_format(X_pred, y_pred, "./submission/lgbm.csv", days)
     
     
