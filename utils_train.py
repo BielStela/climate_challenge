@@ -14,15 +14,13 @@ from utils_reader import read_real_files, read_official_stations, create_idx
 from utils_reader import official_station_adder
 import numpy as np
 from sklearn.model_selection import KFold
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Lasso, Ridge
 from sklearn.metrics import mean_squared_error
-from tqdm import tqdm 
 import pickle
 from time import sleep
-from utils_submission import create_partial
+from utils_reader import create_partial
+from tqdm import tqdm
 
-from ax.core import SearchSpace, ChoiceParameter, ParameterType, Experiment
-from ax import Models
 
 OFFICIAL_ATTR_2 = [['DATA', 'Tm'],
                    ['DATA', 'Tm'],
@@ -95,21 +93,8 @@ def load_results(name="./results.csv"):
         return df, 0
 
 
-def bo_loop(df, nx, ny):
-    range_x = ChoiceParameter(name='x', values=set(map(str, nx)),
-                              parameter_type=ParameterType.STRING)
-    range_y = ChoiceParameter(name="y", values=set(map(str, ny)),
-                              parameter_type=ParameterType.STRING)
-    space = SearchSpace(parameters=[range_x, range_y])
 
-    experiment = Experiment(name="experiment_one_cell",
-                            search_space=space)
 
-    sobol = Models.SOBOL(search_space=experiment.search_space)
-    generator_run = sobol.gen(100)
-
-    for arm in generator_run.arms:
-        print(arm)
 
 def classify_one_idx(X):
 
@@ -124,13 +109,15 @@ def classify_one_idx(X):
         X_train, X_test = X_t[train_idx], X_t[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
 
-        linear = LinearRegression(n_jobs=-1)
+        # linear = LinearRegression(n_jobs=-1)
+        linear = Ridge(alpha=0.1)
         linear.fit(X_train, y_train)
         y_pred = linear.predict(X_test)
 
         results.append(mean_squared_error(y_test, y_pred))
 
-    linear = LinearRegression(n_jobs=-1)
+    # linear = LinearRegression(n_jobs=-1)
+    linear = Ridge(alpha=0.1)
     linear.fit(X_t, y)
 
     return results, linear.coef_, linear.intercept_
@@ -173,8 +160,8 @@ def train_2nd_task_min_error(include_distance=False,
         include_distance=include_distance).transform(
         full_real, official_stations_daily)
 
-    df_full.drop(columns=['DATA_' + str(i) for i in
-                          range(len(official_stations_latlon))], inplace=True)
+    df_full.drop(columns=[i for i in
+                          df_full.columns if 'DATA' in i], inplace=True)
 
     new_points, coefs, intercepts, list_ids, errors = give_n_points_n_weights(df_full,
                                                                               method=method)
@@ -210,7 +197,7 @@ def train_2nd_task_min_error(include_distance=False,
             full_intercept_list.append(intercepts)
             full_id_list.append(list_ids)
 
-        sleep(240)
+        sleep(120)
 
     dump_pickle(path.join(ROOT, "coefs.pkl"), full_coef_list)
     dump_pickle(path.join(ROOT, "intercepts.pkl"), full_intercept_list)

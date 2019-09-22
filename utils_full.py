@@ -8,11 +8,36 @@ Created on Fri Sep 20 20:47:56 2019
 from utils_reader import read_real_files, read_official_stations
 from utils_reader import read_unofficial_data, read_hourly_official
 from utils_reader import official_station_adder,  result_pca
-from utils_reader import OFFICIAL_ATTR, UNOFFICIAL_ATTR, OFFICIAL_ATTR_HOURLY
 import pandas as pd
 import numpy as np
 from lgbm import predict_with_lgbm
 from utils_train import give_pred_format
+
+# correlation threshold +- 0.3
+
+OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6', 'ESTACIO'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'HRm', 'ESTACIO'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10',
+                  'ESTACIO'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10',
+                  'ESTACIO']]
+
+OFFICIAL_ATTR_HOURLY = [['DATA', 'T', 'TX', 'TN', 'HR', 'HRN', 'HRX', 'PPT',
+                         'VVM10', 'DVM10', 'VVX10', 'DVVX10', 'Unnamed: 13'],
+                        ['DATA',  'T', 'Tx', 'Tn', 'HR', 'HRN', 'HRX'],
+                        ['DATA', 'T', 'Tx', 'Tn', 'HR', 'HRn', 'HRx', 'PPT',
+                         'VVM10', 'DVM10', 'VVX10', 'DVX10', 'RS'],
+                        ['DATA',  'T', 'Tx', 'Tn', 'HR', 'HRn', 'HRx', 'PPT',
+                         'VVM10', 'DVM10', 'VVX10', 'DVX10', 'RS']
+                        ]
+
+UNOFFICIAL_ATTR = [['DATA', 'Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
+                    'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max',
+                    'Prec_Today',
+                    'Prec_Year']]
 
 
 def full_real(full=0):
@@ -56,7 +81,7 @@ def add_df(entry, attr, other="official"):
     if other == "official":
         the_other = read_official_stations()
     elif other == "unofficial":
-        unofficial = read_unofficial_data(day=31)
+        unofficial = read_unofficial_data(day=32)
         features = ['Wind_Max', 'Temp_Max', 'Temp_Min']
         unofficial[features] = unofficial[features].apply(
                 lambda x: pd.to_numeric(x))
@@ -72,7 +97,7 @@ def add_df(entry, attr, other="official"):
 
 
 def first_frame(mode="train", with_pca=True, imputer=None, scaler=None,
-                pca=None):
+                pca=None, threshold=0.8, features = None):
 
     if mode == "train":
         real = full_real()
@@ -87,17 +112,28 @@ def first_frame(mode="train", with_pca=True, imputer=None, scaler=None,
     drop_function(df, "DATA")
 
     if mode == "train":
+        corr = df.corr()['T_MEAN']
+        features = [j for i, j in zip(corr, corr.index) if i > 0.3]
+        df = df.loc[:, features + ['day']]
         if with_pca:
-            df, pca, imputer, scaler = result_pca(df)
+            df, pca, imputer, scaler = result_pca(df, threshold=threshold)
         y = df['T_MEAN']
         X = df.loc[:, df.columns[(df.columns != 'T_MEAN') &
                                  (df.columns != 'day')]]
-        return X, y, pca, imputer, scaler
+
+        return X, y, pca, imputer, scaler, features
     else:
+        df = df.loc[:, features + ['day']]
         if with_pca:
             df, pca, imputer, scaler = result_pca(df, scaler=scaler,
-                                                  imputer=imputer, pca=pca)
-        return df[df.columns[df.columns != 'day']], None, df['day']
+                                                  imputer=imputer, pca=pca,
+                                                  threshold=threshold)
+            df['days'] = pd.to_datetime(df['day'],
+                                        format="%Y-%m-%d", exact=True).dt.day
+            df = df[df['days'] > 5]
+        return df.loc[:, df.columns[(df.columns != 'T_MEAN') &
+                                    (df.columns != 'day') &
+                                    (df.columns != 'days')]], None, df['day']
 
 
 def second_frame(mode='train'):
@@ -109,11 +145,12 @@ def second_frame(mode='train'):
 
 
 if __name__ == "__main__":
-
-    X, y, pca, imputer, scaler = first_frame()
+    threshold = 0.97
+    X, y, pca, imputer, scaler, features = first_frame(threshold=threshold)
     X_pred, _, days = first_frame(mode="predict", imputer=imputer,
-                                  scaler=scaler, pca=pca)
-    y_pred = predict_with_lgbm(X_pred, X, y)
-    give_pred_format(X_pred, y_pred, "./submission/lgbm.csv", days)
+                                  scaler=scaler, pca=pca,
+                                  threshold=threshold, features=features)
+#    y_pred = predict_with_lgbm(X_pred, X, y)
+#    give_pred_format(X_pred, y_pred, "./submission/lgbm.csv", days)
     
     

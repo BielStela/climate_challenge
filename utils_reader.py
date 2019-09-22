@@ -25,59 +25,48 @@ import pandas as pd
 import urllib.request as req
 from zipfile import ZipFile
 from io import BytesIO
-import numpy as np
+
 import geopy.distance as distance
 from tqdm import tqdm as tqdm
-import argparse
+
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
 
-np.random.seed(42)
-test_size = 0.2
+OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6', 'ESTACIO'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'HRm', 'ESTACIO'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10',
+                  'ESTACIO'],
+                 ['DATA', 'Tm', 'Tx', 'Tn', 'PPT24h', 'HRm',
+                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10',
+                  'ESTACIO']]
 
-OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'HRm'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'ESTACIO', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10']]
-
-OFFICIAL_ATTR_HOURLY = [['DATA', 'T', 'TX', 'TN', 'HR', 'HRN',
-                         'HRX', 'PPT', 'VVM10', 'DVM10', 'VVX10', 'DVVX10',
-                         'Unnamed: 13'],
-                        ['DATA', 'T', 'Tx', 'Tn', 'HR', 'HRN', 'HRX'],
+OFFICIAL_ATTR_HOURLY = [['DATA', 'T', 'TX', 'TN', 'HR', 'HRN', 'HRX', 'PPT',
+                         'VVM10', 'DVM10', 'VVX10', 'DVVX10', 'Unnamed: 13'],
+                        ['DATA',  'T', 'Tx', 'Tn', 'HR', 'HRN', 'HRX'],
                         ['DATA', 'T', 'Tx', 'Tn', 'HR', 'HRn', 'HRx', 'PPT',
                          'VVM10', 'DVM10', 'VVX10', 'DVX10', 'RS'],
-                        ['DATA', 'T', 'Tx', 'Tn', 'HR', 'HRn', 'HRx', 'PPT',
+                        ['DATA',  'T', 'Tx', 'Tn', 'HR', 'HRn', 'HRx', 'PPT',
                          'VVM10', 'DVM10', 'VVX10', 'DVX10', 'RS']
                         ]
 
 UNOFFICIAL_ATTR = [['DATA', 'Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
-                    'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max']]
+                    'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max',
+                    'Prec_Today',
+                    'Prec_Year']]
 
 
-def parse_arguments(parser):
-    parser.add_argument("-d", dest="comp_dist",
-                        help="compute distances and save them in a file",
-                        type=int,
-                        default=0)
-    parser.add_argument("-s", dest="save",
-                        help="save x and y in a folder ./data_for_models",
-                        type=int,
-                        default=1)
-    parser.add_argument("-n", dest="no_official",
-                        help="compute qwith no official",
-                        type=int,
-                        default=1)
-    parser.add_argument("-p", dest="pred",
-                        help="save for rpediction",
-                        type=int,
-                        default=0)
+def create_partial():
 
-    return parser.parse_args()
+    real_2016 = pd.read_csv("./climateChallengeData/real/real_2016.csv",
+                            index_col=None)
+    real_2016 = real_2016.groupby('day',
+                                  as_index=False).agg({'T_MEAN': 'mean'})
+    real_2016.columns = ['date', 'mean']
+    real_2016.to_csv("./data_for_models/sub_partial.csv")
 
 
 class DataFrameSelector(BaseEstimator, TransformerMixin):
@@ -292,47 +281,12 @@ def read_unofficial_data(day=6):
     return unofficial
 
 
-def give_basic_dataset(include_distance=0, official_attr=None):
-    full_real = read_real_files()
-    official_stations_daily = read_official_stations()
-
-    if include_distance:
-        official_stations_latlon = pd.read_csv("./climateChallengeData/officialStations.csv")
-        grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
-        compute_distances(official_stations_latlon, grid_points)
-        create_idx(full_real)
-    else:
-        grid_points = None
-
-    df_full = official_station_adder(
-        official_attr,
-        include_distance=include_distance,
-        distances=grid_points).transform(
-        full_real, official_stations_daily)
-
-    df_full.drop(columns=['nx', 'ny', 'LAT', 'LON', 'T_MIN', 'T_MAX'] +
-                         [i for i in df_full.columns if 'ESTACIO_' in i] +
-                         [i for i in df_full.columns if 'DATA_' in i],
-                 inplace=True)
-    return df_full
-
-
 def input_scale(X):
     imputer = SimpleImputer(strategy='median')
     X_t = imputer.fit_transform(X.values)
     scaler = StandardScaler()
     X_t = scaler.fit_transform(X_t)
     return X_t, imputer, scaler
-
-
-def give_n_add_hourly(prev_data=None, official_attr_hourly=None):
-    official_stations_hourly = read_hourly_official()
-    df_full = official_station_adder(official_attr_hourly,
-                                     include_distance=False,
-                                     distances=None).transform(
-                                             prev_data,
-                                             official_stations_hourly)
-    return df_full
 
 
 def result_pca(df, threshold=0.95, scaler=None, imputer=None, pca=None):
@@ -353,86 +307,3 @@ def result_pca(df, threshold=0.95, scaler=None, imputer=None, pca=None):
     new = pd.DataFrame(data=X_n, columns=columns)
     full = pd.concat([full_a, new], ignore_index=False, axis=1)
     return full, pca, imputer, scaler
-
-
-def give_n_add_nonoff_dataset(include_distance=0, prev_data=None,
-                              nonofficial_attr=None):
-    if include_distance:
-        non_official_stations_latlon = pd.read_csv("./climateChallengeData/noOfficialStations.csv")
-        grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
-        compute_distances(non_official_stations_latlon,
-                          grid_points,
-                          file_name="./climateChallengeData/distances_noofficial.csv")
-    else:
-        grid_points_non_official = None
-        unofficial = read_unofficial_data()
-        df_full = official_station_adder(
-                nonofficial_attr,
-                include_distance=include_distance,
-                distances=grid_points_non_official).transform(
-                        prev_data, [unofficial])
-    
-    df_full.drop(columns=['DATA'])
-    return df_full
-
-
-def prepare_data(include_distance=0, save_data=1,
-                 add_not_official=False, add_hourly_data=False,
-                 official_attr_hourly=OFFICIAL_ATTR_HOURLY,
-                 nonofficial_attr=UNOFFICIAL_ATTR,
-                 official_attr=OFFICIAL_ATTR,
-                 with_pca=True):
-
-    download_files()
-    full = give_basic_dataset(include_distance=include_distance,
-                              official_attr=official_attr)
-
-    full = result_pca(full)
-
-    if add_not_official:
-        full = give_n_add_nonoff_dataset(include_distance=include_distance,
-                                         nonofficial_attr=nonofficial_attr,
-                                         prev_data=full)
-        if with_pca:
-            full = result_pca(full)
-            
-    print(full.info())
-
-    if add_hourly_data:
-        full = give_n_add_hourly(prev_data=full,
-                                 official_attr_hourly=official_attr_hourly)
-        print(full.info())
-        if with_pca:
-            full = result_pca(full)
-        
-
-    y_columns = ['T_MEAN']
-    x_columns = full.columns[full.columns != 'T_MEAN']
-
-    X = DataFrameSelector(x_columns).transform(full)
-    y = DataFrameSelector(y_columns).transform(full)
-
-    X.drop(columns=['day'],
-           inplace=True)
-    if include_distance:
-        X.drop(columns=['idx'], inplace=True)
-
-    if save_data:
-        save_data_folder(X, y, name_y="y.parquet.gzip")
-        full.to_parquet("./data_for_models/full.parquet.gzip",
-                        compression='gzip')
-    else:
-        return X, y
-
-
-if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser()
-    parsed = parse_arguments(parser)
-
-    prepare_data(include_distance=parsed.comp_dist,
-                 save_data=parsed.save,
-                 add_not_official=parsed.no_official,
-                 add_hourly_data=False,
-                 with_pca=True)
-#    file_for_prediction_n_submission()
