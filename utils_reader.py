@@ -30,6 +30,7 @@ import geopy.distance as distance
 from tqdm import tqdm as tqdm
 import argparse
 from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
 
@@ -115,13 +116,14 @@ class official_station_adder(BaseEstimator, TransformerMixin):
     def transform(self, X, y):
         # to_datetime functions is super slow if format is not supplied
         self.full = X
-
+        
         for i, j in tqdm(zip(self.attributes_to_add,
                              range(len(self.attributes_to_add))),
                          total=len(self.attributes_to_add)):
             y[j]['DATA'] = pd.to_datetime(y[j]['DATA'],
                                           format="%Y-%m-%d", exact=True)
             y[j]['DATA'] = y[j]['DATA'].dt.strftime("%Y-%m-%d")
+
             self.full = pd.merge(self.full, y[j][i], how='inner',
                                  left_on='day', right_on='DATA',
                                  suffixes=("_0", "_1"))
@@ -172,7 +174,9 @@ def read_official_stations(name="./climateChallengeData/data_S2_S3_S4.xlsx"):
 def read_hourly_official(direc="./climateChallengeData/data_hours"):
 
     hour_files = []
-    for i in listdir(direc):
+    files = [i for i in listdir(direc)]
+    files.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+    for i in files:
         file = pd.read_csv(path.join(direc, i), delimiter=";")
         file['date'] = pd.to_datetime(file['DATA'],
                                       format="%d/%m/%Y %H:%M",
@@ -189,11 +193,6 @@ def read_hourly_official(direc="./climateChallengeData/data_hours"):
         file_filtered = file[file.year.isin(['2012', '2013',
                                              '2014', '2015',
                                              '2016'])]
-        file_filtered = file_filtered[file_filtered.day.isin(['1',
-                                                              '2',
-                                                              '3',
-                                                              '4',
-                                                              '5'])]
         hours_grouped = file_filtered.groupby('DATA',
                                               as_index=False).agg(
                                                       pd.Series.mean)
@@ -202,7 +201,6 @@ def read_hourly_official(direc="./climateChallengeData/data_hours"):
                                       exact=True)
         file['DATA'] = file['DATA'].dt.strftime("%Y-%m-%d")
         hour_files.append(hours_grouped)
-
     return hour_files
 
 
@@ -283,7 +281,7 @@ def save_data_folder(X, y=None, direc="./data_for_models/",
 
 def read_unofficial_data(day=6):
     unofficial = pd.read_excel("./climateChallengeData/data_NoOfficial.xlsx",
-                               delimiter=";")
+                               delimiter=";", index_col=0)
     unofficial['Date'] = pd.to_datetime(unofficial['Date'], format="%d/%m/%Y",
                                         exact=True)
     unofficial['DATA'] = unofficial['Date'].dt.strftime("%Y-%m-%d")
@@ -319,10 +317,12 @@ def give_basic_dataset(include_distance=0, official_attr=None):
     return df_full
 
 
-def input_(X):
+def input_scale(X):
     imputer = SimpleImputer(strategy='median')
     X_t = imputer.fit_transform(X.values)
-    return X_t
+    scaler = StandardScaler()
+    X_t = scaler.fit_transform(X_t)
+    return X_t, imputer, scaler
 
 
 def give_n_add_hourly(prev_data=None, official_attr_hourly=None):
@@ -335,19 +335,24 @@ def give_n_add_hourly(prev_data=None, official_attr_hourly=None):
     return df_full
 
 
-def result_pca(df, threshold=0.97):
+def result_pca(df, threshold=0.95, scaler=None, imputer=None, pca=None):
     full_a = df.loc[:, ['day', 'T_MEAN']]
     X = df.loc[:,
                df.columns[(df.columns != 'T_MEAN') & (df.columns != 'day')]]
-    X_t = input_(X)
-    pca = PCA(n_components=threshold)
-    X_n = pca.fit_transform(X_t)
-    columns = ["Feature_" + str(i) for i in range(len(X.columns),
-                                                  len(X.columns) +
+    if pca is not None:
+        X_t = imputer.transform(X)
+        X_t = scaler.transform(X_t)
+        X_n = pca.transform(X_t)
+    else:
+        X_t, imputer, scaler = input_scale(X)
+        pca = PCA(n_components=threshold)
+        X_n = pca.fit_transform(X_t)
+    columns = ["Feature_" + str(i) for i in range(len(full_a.columns),
+                                                  len(full_a.columns) +
                                                   len(X_n[0, :]))]
     new = pd.DataFrame(data=X_n, columns=columns)
     full = pd.concat([full_a, new], ignore_index=False, axis=1)
-    return full
+    return full, pca, imputer, scaler
 
 
 def give_n_add_nonoff_dataset(include_distance=0, prev_data=None,

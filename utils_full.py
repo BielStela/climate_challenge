@@ -56,11 +56,12 @@ def add_df(entry, attr, other="official"):
     if other == "official":
         the_other = read_official_stations()
     elif other == "unofficial":
-        unofficial = read_unofficial_data()
+        unofficial = read_unofficial_data(day=31)
         features = ['Wind_Max', 'Temp_Max', 'Temp_Min']
         unofficial[features] = unofficial[features].apply(
                 lambda x: pd.to_numeric(x))
-        the_other = [unofficial]
+        the_other = [unofficial.pivot(index='DATA',
+                                      columns='Station').reset_index()]
     else:
         the_other = read_hourly_official()
 
@@ -70,7 +71,8 @@ def add_df(entry, attr, other="official"):
     return df
 
 
-def first_frame(mode="train", with_pca=True):
+def first_frame(mode="train", with_pca=True, imputer=None, scaler=None,
+                pca=None):
 
     if mode == "train":
         real = full_real()
@@ -78,35 +80,39 @@ def first_frame(mode="train", with_pca=True):
         real = dates_f_prediction()
 
     df = add_df(real, OFFICIAL_ATTR)
-    df = add_df(df, UNOFFICIAL_ATTR, "unofficial")
     df = add_df(df, OFFICIAL_ATTR_HOURLY, "hourly")
+    df = add_df(df, UNOFFICIAL_ATTR, "unofficial")
 
     drop_function(df, "ESTACIO_")
     drop_function(df, "DATA")
 
-    if with_pca:
-        df = result_pca(df)
-
     if mode == "train":
+        if with_pca:
+            df, pca, imputer, scaler = result_pca(df)
         y = df['T_MEAN']
         X = df.loc[:, df.columns[(df.columns != 'T_MEAN') &
                                  (df.columns != 'day')]]
-        return X, y
+        return X, y, pca, imputer, scaler
     else:
+        if with_pca:
+            df, pca, imputer, scaler = result_pca(df, scaler=scaler,
+                                                  imputer=imputer, pca=pca)
         return df[df.columns[df.columns != 'day']], None, df['day']
 
+
 def second_frame(mode='train'):
-    
+
     if mode == "train":
         real = full_real(full=1)
     else:
         real = dates_f_prediction(full=1)
 
-        
+
 if __name__ == "__main__":
 
-    X, y = first_frame()
-    X_pred, _, days = first_frame(mode="predict")
+    X, y, pca, imputer, scaler = first_frame()
+    X_pred, _, days = first_frame(mode="predict", imputer=imputer,
+                                  scaler=scaler, pca=pca)
     y_pred = predict_with_lgbm(X_pred, X, y)
     give_pred_format(X_pred, y_pred, "./submission/lgbm.csv", days)
     
