@@ -258,15 +258,15 @@ def download_files(direc="./climateChallengeData/"):
 
 
 def save_data_folder(X, y=None, direc="./data_for_models/",
-                     name_X="X.parquet.gzip",
+                     name_X="X.csv",
                      name_y=None):
 
     if not path.exists(direc):
         mkdir(direc)
 
-    X.to_parquet(path.join(direc, name_X), compression='gzip')
+    X.to_csv(path.join(direc, name_X))
     if name_y is not None:
-        y.to_parquet(path.join(direc, name_y), compression='gzip')
+        y.to_csv(path.join(direc, name_y))
 
 
 def read_unofficial_data(day=6):

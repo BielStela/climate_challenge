@@ -6,13 +6,14 @@ Created on Fri Sep 20 20:47:56 2019
 """
 
 from utils_reader import read_real_files, read_official_stations
+from os import path, mkdir
 from utils_reader import read_unofficial_data, read_hourly_official
 from utils_reader import official_station_adder,  result_pca, input_scale
 import pandas as pd
 import numpy as np
-from lgbm import predict_with_lgbm
-from random_forest import predict_with_forest
 from utils_train import give_pred_format
+from bestmodel import default_model_predict
+from sklearn.linear_model import Lasso
 
 # correlation threshold +- 0.3
 
@@ -164,7 +165,17 @@ def second_frame(mode='train'):
     else:
         real = dates_f_prediction(full=1)
 
+def save_data_numpy(X, y=None, direc="./data_for_models/",
+                     name_X="X.npy",
+                     name_y=None):
 
+    if not path.exists(direc):
+        mkdir(direc)
+
+    np.save(path.join(direc, name_X), X)
+    if name_y is not None:
+        np.save(path.join(direc, name_y), y)
+        
 if __name__ == "__main__":
     threshold = 0.97
     # retorna X=X_train, y=y_train
@@ -173,9 +184,13 @@ if __name__ == "__main__":
     X_pred, _, days = first_frame(mode="predict", imputer=imputer,
                                   scaler=scaler, pca=pca,
                                   threshold=threshold, features=features)
-    # prediu ambn lgbm
-    y_pred = predict_with_forest(X_pred, X, y)
-    #dona la predicció amb format d'entrega
-    give_pred_format(X_pred, y_pred, "./submission/lgbm.csv", days)
     
+    save_data_numpy(X, y, name_y = "y.npy")
+    save_data_numpy(X_pred, name_X="X_test.npy")
+    y_pred = default_model_predict(Lasso(alpha=0.1), X, y, X_pred)
+#    # prediu ambn lgbm
+#    y_pred = predict_with_forest(X_pred, X, y)
+#    #dona la predicció amb format d'entrega
+    give_pred_format(X_pred, y_pred, "./submission/lasso.csv", days)
+#    
     
