@@ -7,51 +7,65 @@ Created on Sun Sep 22 18:36:01 2019
 """
 
 from utils_full import add_df, drop_function
-from ax.core import SearchSpace, ChoiceParameter, ParameterType, Experiment
+from ax.core import SearchSpace, RangeParameter, ParameterType, Experiment
 from utils_reader import read_real_files, create_idx
-from ax import Models, Metric, OptimizationConfig, Objective, Runner
+from ax import Models, Metric, OptimizationConfig, Objective, Runner, save
 from ax.core.data import Data
+from ax.storage.metric_registry import register_metric
+from ax.storage.runner_registry import register_runner
 import numpy as np
-import tqdm as tqdm
-import pandas as pdq
+from tqdm import tqdm
+import pandas as pd
 from utils_train import classify_one_idx
 from sklearn.metrics import mean_squared_error
-from sklearn.linear import LinearRegression
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import KFold
+from functools import partial
+
 
 OFFICIAL_ATTR_2 = [['DATA', 'Tm'],
                    ['DATA', 'Tm'],
                    ['DATA', 'Tm'],
                    ['DATA', 'Tm']]
 
+
 def main():
 
-    df = load_basic()
-    print(df.columns)
+    df, index, grid = load_basic()
+
+    for i in range(10):
+        bo_loop(df, index, grid, "experiment_" + str(i) + ".json")
 
 
 def load_basic(official_attr=OFFICIAL_ATTR_2):
     real = read_real_files()
+    grid_points = pd.read_csv("./climateChallengeData/grid2latlon.csv")
+    create_idx(grid_points)
+    i = len(grid_points)
     create_idx(real)
     df = add_df(real, OFFICIAL_ATTR_2)
     drop_function(df, "ESTACIO_")
     drop_function(df, "DATA")
+
     df.drop(columns=['ndays', 'nx', 'ny', 'LAT', 'LON', 'T_MIN', 'T_MAX'],
             inplace=True)
-    return df
+    return df, i, grid_points
 
 
-def performance(params, df):
-    df = add_point(params, df)
-    return return_performance(df)
+def performance(df, grid, params):
+    df_opt = add_point(params, df, grid)
+    return return_performance(df_opt)
 
 
-def add_point(params, df):
-    idx = params['x'] + params['y']
-    df_selected = df[df['idx'] == idx]
+def add_point(params, df, grid):
+    index = params['index']
+    idx = grid.loc[index, 'idx']
+    df_selected = df[df['idx'] == str(idx)]
+    df_selected = df_selected.loc[:, ['day', 'T_MEAN']]
+    jj = len(df.columns)
     df_full = df.merge(df_selected, how='inner',
                        left_on='day', right_on='day',
-                       suffixes=("", "_1"))
+                       suffixes=("", "_" + str(jj + 1)))
     return df_full
 
 
@@ -77,6 +91,12 @@ def return_performance(X):
 
 
 class LRMetric(Metric):
+
+    def __init__(self, partial_performance, name):
+        self.partial_performance = partial_performance
+        self._name = name
+        self.lower_is_better = True
+
     def fetch_trial_data(self, trial):
         records = []
         for arm_name, arm in trial.arms_by_name.items():
@@ -84,47 +104,54 @@ class LRMetric(Metric):
             records.append({
                 "arm_name": arm_name,
                 "metric_name": self.name,
-                "mean": performance(params),
+                "mean": self.partial_performance(params),
                 "sem": 0.0,
                 "trial_index": trial.index,
             })
         return Data(df=pd.DataFrame.from_records(records))
 
+
 class MyRunner(Runner):
     def run(self, trial):
         return {"name": str(trial.index)}
 
-def bo_loop(df, nx, ny):
-    range_x = ChoiceParameter(name='x', values=set(map(str, nx)),
-                              parameter_type=ParameterType.STRING)
-    range_y = ChoiceParameter(name="y", values=set(map(str, ny)),
-                              parameter_type=ParameterType.STRING)
-    space = SearchSpace(parameters=[range_x, range_y])
+
+def bo_loop(df, index, grid, name):
+    range_x = RangeParameter(name='index', lower=0, upper=index-1,
+                             parameter_type=ParameterType.INT)
+    space = SearchSpace(parameters=[range_x])
 
     experiment = Experiment(name="experiment_one_cell",
                             search_space=space)
 
-    sobol = Models.SOBOL(search_space=experiment.search_space)
-    generator_run = sobol.gen(100)
-
     optimization_config = OptimizationConfig(objective=Objective(
-        metric=LRMetric(name="lr"),
+        metric=LRMetric(partial(performance, df, grid), name="lr"),
         minimize=True,
         ),
     )
 
     experiment.optimization_config = optimization_config
     experiment.runner = MyRunner()
-    experiment.new_batch_trial(generator_run=generator_run)
-    experiment.trials[0].run()
-    data = experiment.fetch_data()
 
-    gpei = Models.BOTORCH(experiment=experiment, data=data)
-    generator_run = gpei.gen(1000)
-    experiment.new_batch_trial(generator_run=generator_run)
+    sobol = Models.SOBOL(search_space=experiment.search_space)
+    for i in tqdm(range(1)):
+        generator_run = sobol.gen(1)
+        experiment.new_trial(generator_run=generator_run)
+        experiment.trials[i].run()
+        data = experiment.fetch_data()
 
-    experiment.trials[-1].run()
-    data = experiment.fetch_data()
-    
+    for i in tqdm(range(1, 1 + 5)):
+        gpei = Models.BOTORCH(experiment=experiment, data=data)
+        generator_run = gpei.gen(1)
+        experiment.new_trial(generator_run=generator_run)
+        experiment.trials[i].run()
+        data = experiment.fetch_data()
+
+
+    print(data.df)
+
+
+
+
 if __name__ == "__main__":
     main()

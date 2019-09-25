@@ -105,7 +105,7 @@ class official_station_adder(BaseEstimator, TransformerMixin):
     def transform(self, X, y):
         # to_datetime functions is super slow if format is not supplied
         self.full = X
-        
+        jj = len(self.full.columns)
         for i, j in tqdm(zip(self.attributes_to_add,
                              range(len(self.attributes_to_add))),
                          total=len(self.attributes_to_add)):
@@ -115,8 +115,9 @@ class official_station_adder(BaseEstimator, TransformerMixin):
 
             self.full = pd.merge(self.full, y[j][i], how='inner',
                                  left_on='day', right_on='DATA',
-                                 suffixes=("_0", "_1"))
-            
+                                 suffixes=("_" + str(jj),
+                                           "_" + str(jj+1)))
+            jj += 1
 
         if self.include_distance:
             self.full = pd.merge(self.full, self.distances, how='inner',

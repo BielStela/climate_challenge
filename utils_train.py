@@ -41,7 +41,7 @@ def give_pred_format(X_test, y_pred, name, days):
     df_partial['date'] = pd.to_datetime(df_partial['date'], format="%d/%m/%Y",
                                         exact=True)
     df_partial['date'] = df_partial['date'].dt.strftime("%d/%m/%Y")
-    result = pd.concat([df, df_partial], ignore_index=True)
+    result = pd.concat([df, df_partial], ignore_index=True, sort=True)
     result['date'] = pd.to_datetime(result['date'], format="%d/%m/%Y",
                                     exact=True)
     result.sort_values('date', inplace=True)
@@ -93,9 +93,6 @@ def load_results(name="./results.csv"):
         return df, 0
 
 
-
-
-
 def classify_one_idx(X):
 
     X_t = X[X.columns[(X.columns != 'T_MEAN') &
@@ -129,7 +126,9 @@ def give_n_points_n_weights(df, n_points=1, identifier='idx', method="mean"):
     list_mins = [[], [], []]
 
     list_ids = np.unique(df[identifier])
+
     for i in tqdm(list_ids):
+
         X = df[df[identifier] == i]
         errors, coefs, intercepts = classify_one_idx(X)
         if method == "mean":
@@ -141,6 +140,7 @@ def give_n_points_n_weights(df, n_points=1, identifier='idx', method="mean"):
 
         new_points = list_ids[np.argpartition(list_mins[0],
                                               -n_points)[-n_points:]]
+
     return new_points, list_mins[1], list_mins[2], list_ids, list_mins[0]
 
 
@@ -197,7 +197,7 @@ def train_2nd_task_min_error(include_distance=False,
             full_intercept_list.append(intercepts)
             full_id_list.append(list_ids)
 
-        sleep(120)
+        sleep(60)
 
     dump_pickle(path.join(ROOT, "coefs.pkl"), full_coef_list)
     dump_pickle(path.join(ROOT, "intercepts.pkl"), full_intercept_list)

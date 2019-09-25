@@ -7,22 +7,20 @@ Created on Fri Sep 20 20:47:56 2019
 
 from utils_reader import read_real_files, read_official_stations
 from utils_reader import read_unofficial_data, read_hourly_official
-from utils_reader import official_station_adder,  result_pca
+from utils_reader import official_station_adder,  result_pca, input_scale
 import pandas as pd
 import numpy as np
 from lgbm import predict_with_lgbm
+from random_forest import predict_with_forest
 from utils_train import give_pred_format
 
 # correlation threshold +- 0.3
 
-OFFICIAL_ATTR = [['DATA', 'Tm', 'Tx', 'Tn', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem6', 'DVum6', 'VVx6', 'DVx6', 'ESTACIO'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'HRm', 'ESTACIO'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10',
+OFFICIAL_ATTR = [['DATA', 'Tm', 'ESTACIO'],
+                 ['DATA', 'Tm', 'ESTACIO'],
+                 ['DATA', 'Tm',
                   'ESTACIO'],
-                 ['DATA', 'Tm', 'Tx', 'Tn', 'PPT24h', 'HRm',
-                  'hPa', 'RS24h', 'VVem10', 'DVum10', 'VVx10', 'DVx10',
+                 ['DATA', 'Tm', 
                   'ESTACIO']]
 
 OFFICIAL_ATTR_HOURLY = [['DATA', 'T', 'TX', 'TN', 'HR', 'HRN', 'HRX', 'PPT',
@@ -34,11 +32,19 @@ OFFICIAL_ATTR_HOURLY = [['DATA', 'T', 'TX', 'TN', 'HR', 'HRN', 'HRX', 'PPT',
                          'VVM10', 'DVM10', 'VVX10', 'DVX10', 'RS']
                         ]
 
-UNOFFICIAL_ATTR = [['DATA', 'Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
-                    'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max',
-                    'Prec_Today',
-                    'Prec_Year']]
 
+def unofficial_attr():
+    nonoff = np.unique(read_unofficial_data(day=32)['Station'])
+    UNOFFICIAL_ATTR = ['DATA']
+    sample = ['Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
+              'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max',
+              'Prec_Today',
+              'Prec_Year']
+    final_labels = []
+    for i in sample:
+        for j in nonoff:
+            final_labels.append(str(i) + str(j))
+    return UNOFFICIAL_ATTR + final_labels
 
 def full_real(full=0):
     real = read_real_files()
@@ -85,8 +91,10 @@ def add_df(entry, attr, other="official"):
         features = ['Wind_Max', 'Temp_Max', 'Temp_Min']
         unofficial[features] = unofficial[features].apply(
                 lambda x: pd.to_numeric(x))
-        the_other = [unofficial.pivot(index='DATA',
-                                      columns='Station').reset_index()]
+        unofficial = unofficial.pivot(index='DATA',
+                                      columns='Station').reset_index()
+        unofficial.columns = [str(i) + str(j) for i, j in unofficial.columns]
+        the_other = [unofficial]
     else:
         the_other = read_hourly_official()
 
@@ -96,7 +104,7 @@ def add_df(entry, attr, other="official"):
     return df
 
 
-def first_frame(mode="train", with_pca=True, imputer=None, scaler=None,
+def first_frame(mode="train", with_pca=False, imputer=None, scaler=None,
                 pca=None, threshold=0.8, features = None):
 
     if mode == "train":
@@ -105,8 +113,8 @@ def first_frame(mode="train", with_pca=True, imputer=None, scaler=None,
         real = dates_f_prediction()
 
     df = add_df(real, OFFICIAL_ATTR)
-    df = add_df(df, OFFICIAL_ATTR_HOURLY, "hourly")
-    df = add_df(df, UNOFFICIAL_ATTR, "unofficial")
+    # df = add_df(df, OFFICIAL_ATTR_HOURLY, "hourly")
+    # df = add_df(df, [unofficial_attr()], "unofficial")
 
     drop_function(df, "ESTACIO_")
     drop_function(df, "DATA")
@@ -117,23 +125,36 @@ def first_frame(mode="train", with_pca=True, imputer=None, scaler=None,
         df = df.loc[:, features + ['day']]
         if with_pca:
             df, pca, imputer, scaler = result_pca(df, threshold=threshold)
-        y = df['T_MEAN']
-        X = df.loc[:, df.columns[(df.columns != 'T_MEAN') &
-                                 (df.columns != 'day')]]
-
+        else:
+            y = df['T_MEAN']
+            X = df.loc[:, df.columns[(df.columns != 'T_MEAN') &
+                                     (df.columns != 'day')]]
+            X, imputer, scaler = input_scale(X)
+            features, pca = None, None
         return X, y, pca, imputer, scaler, features
     else:
-        df = df.loc[:, features + ['day']]
+        
         if with_pca:
+            df = df.loc[:, features + ['day']]
             df, pca, imputer, scaler = result_pca(df, scaler=scaler,
                                                   imputer=imputer, pca=pca,
                                                   threshold=threshold)
             df['days'] = pd.to_datetime(df['day'],
                                         format="%Y-%m-%d", exact=True).dt.day
             df = df[df['days'] > 5]
-        return df.loc[:, df.columns[(df.columns != 'T_MEAN') &
-                                    (df.columns != 'day') &
-                                    (df.columns != 'days')]], None, df['day']
+            X = df.loc[:, df.columns[(df.columns != 'T_MEAN') &
+                                     (df.columns != 'day') &
+                                     (df.columns != 'days')]]
+        else:
+            df['days'] = pd.to_datetime(df['day'],
+                                        format="%Y-%m-%d", exact=True).dt.day
+            df = df[df['days'] > 5]
+            X = df.loc[:, df.columns[(df.columns != 'T_MEAN') &
+                                     (df.columns != 'day') &
+                                     (df.columns != 'days')]]
+            X = imputer.transform(X)
+            X = scaler.transform(X)
+        return X, None, df['day']
 
 
 def second_frame(mode='train'):
@@ -153,7 +174,7 @@ if __name__ == "__main__":
                                   scaler=scaler, pca=pca,
                                   threshold=threshold, features=features)
     # prediu ambn lgbm
-    y_pred = predict_with_lgbm(X_pred, X, y)
+    y_pred = predict_with_forest(X_pred, X, y)
     #dona la predicció amb format d'entrega
     give_pred_format(X_pred, y_pred, "./submission/lgbm.csv", days)
     
