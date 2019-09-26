@@ -35,7 +35,7 @@ def choose_best_default_model(X, y):
               LinearRegression(n_jobs=-1),
               Ridge(alpha=0.1),
               Lasso(alpha=0.1),
-              xgboost.XGBRegressor(),
+              xgboost.XGBRegressor(objective='reg:linear'),
               AdaBoostRegressor(base_estimator=Ridge(alpha=0.1),
                                 learning_rate=0.01, n_estimators=100,
                                 loss='linear'),
