@@ -15,6 +15,8 @@ from utils_train import give_pred_format
 from bestmodel import default_model_predict
 from sklearn.linear_model import Lasso
 
+
+# BEST: lasso with T and day alpha =0.1
 # correlation threshold +- 0.3
 
 OFFICIAL_ATTR = [['DATA', 'Tm', 'ESTACIO'],
@@ -37,15 +39,17 @@ OFFICIAL_ATTR_HOURLY = [['DATA', 'T', 'TX', 'TN', 'HR', 'HRN', 'HRX', 'PPT',
 def unofficial_attr():
     nonoff = np.unique(read_unofficial_data(day=32)['Station'])
     UNOFFICIAL_ATTR = ['DATA']
-    sample = ['Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
-              'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max',
-              'Prec_Today',
-              'Prec_Year']
+#    sample = ['Alt', 'Temp_Max', 'Temp_Min', 'Hum_Max',
+#              'Hum_Min', 'Pres_Max', 'Pres_Min', 'Wind_Max',
+#              'Prec_Today',
+#              'Prec_Year']
+    sample = ['Temp_Max', 'Temp_Min']
     final_labels = []
     for i in sample:
         for j in nonoff:
             final_labels.append(str(i) + str(j))
     return UNOFFICIAL_ATTR + final_labels
+
 
 def full_real(full=0):
     real = read_real_files()
@@ -114,15 +118,17 @@ def first_frame(mode="train", with_pca=False, imputer=None, scaler=None,
         real = dates_f_prediction()
 
     df = add_df(real, OFFICIAL_ATTR)
+    df['ndays'] = pd.to_datetime(df['day'], format="%Y-%m-%d",
+                                 exact=True).dt.dayofyear
     # df = add_df(df, OFFICIAL_ATTR_HOURLY, "hourly")
-    # df = add_df(df, [unofficial_attr()], "unofficial")
+    df = add_df(df, [unofficial_attr()], "unofficial")
 
     drop_function(df, "ESTACIO_")
     drop_function(df, "DATA")
 
     if mode == "train":
         corr = df.corr()['T_MEAN']
-        features = [j for i, j in zip(corr, corr.index) if i > 0.3]
+        features = [j for i, j in zip(corr, corr.index) if i > 0.8]
         df = df.loc[:, features + ['day']]
         if with_pca:
             df, pca, imputer, scaler = result_pca(df, threshold=threshold)
@@ -131,10 +137,10 @@ def first_frame(mode="train", with_pca=False, imputer=None, scaler=None,
             X = df.loc[:, df.columns[(df.columns != 'T_MEAN') &
                                      (df.columns != 'day')]]
             X, imputer, scaler = input_scale(X)
-            features, pca = None, None
+            pca = None
         return X, y, pca, imputer, scaler, features
     else:
-        
+        df = df.loc[:, features + ['day']]
         if with_pca:
             df = df.loc[:, features + ['day']]
             df, pca, imputer, scaler = result_pca(df, scaler=scaler,
@@ -187,10 +193,10 @@ if __name__ == "__main__":
     
     save_data_numpy(X, y, name_y = "y.npy")
     save_data_numpy(X_pred, name_X="X_test.npy")
-    y_pred = default_model_predict(Lasso(alpha=0.1), X, y, X_pred)
-#    # prediu ambn lgbm
-#    y_pred = predict_with_forest(X_pred, X, y)
-#    #dona la predicció amb format d'entrega
-    give_pred_format(X_pred, y_pred, "./submission/lasso.csv", days)
+#    y_pred = default_model_predict(Lasso(alpha=0.1), X, y, X_pred)
+##    # prediu ambn lgbm
+#
+##    #dona la predicció amb format d'entrega
+#    give_pred_format(X_pred, y_pred, "./submission/lasso.csv", days)
 #    
     

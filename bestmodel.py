@@ -15,6 +15,7 @@ import xgboost
 from sklearn.metrics import mean_absolute_error, mean_squared_error 
 import numpy as np
 import pandas as pd
+import sklearn.gaussian_process as gp
 
 def default_model_test(model, X_train, y_train, X_test, y_test):
     mod = model
@@ -31,16 +32,20 @@ def default_model_predict(model, X_train, y_train, X_test):
 def choose_best_default_model(X, y):
     
     models = [RandomForestRegressor(n_jobs=-1),
-          LinearRegression(n_jobs=-1),
-          Ridge(alpha=0.1),
-          Lasso(alpha=0.1),
-          xgboost.XGBRegressor(),
-          AdaBoostRegressor(base_estimator=LinearRegression(),
-                            learning_rate=0.5),
-          AdaBoostRegressor(base_estimator=DecisionTreeRegressor(),
-                            learning_rate = 0.5),
-          SVR()]
-    
+              LinearRegression(n_jobs=-1),
+              Ridge(alpha=0.1),
+              Lasso(alpha=0.1),
+              xgboost.XGBRegressor(),
+              AdaBoostRegressor(base_estimator=Ridge(alpha=0.1),
+                                learning_rate=0.01, n_estimators=100,
+                                loss='linear'),
+              AdaBoostRegressor(base_estimator=DecisionTreeRegressor(),
+                                learning_rate=0.5),
+              SVR(),
+              gp.GaussianProcessRegressor(kernel=gp.kernels.ConstantKernel(1.0,
+                               (1e-1, 1e3))*gp.kernels.RBF(10.0, (1e-3, 1e3)),
+                                          n_restarts_optimizer=10, alpha=0.1,
+                                          normalize_y=True)]
     results = []
     fold = KFold(n_splits=10, shuffle=True)
     
@@ -51,7 +56,7 @@ def choose_best_default_model(X, y):
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
         
-            s, a = default_model(j, X_train, y_train, X_test, y_test)
+            s, a = default_model_test(j, X_train, y_train, X_test, y_test)
             
             square.append(s)
             absolute.append(a)
