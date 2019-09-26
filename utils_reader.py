@@ -278,7 +278,6 @@ def read_unofficial_data(day=6):
     unofficial['ndays_year'] = unofficial['Date'].dt.day
     unofficial = unofficial[unofficial['ndays_year'] < day]
     unofficial.drop(columns=['Date', 'ndays_year'], inplace=True)
-
     return unofficial
 
 
