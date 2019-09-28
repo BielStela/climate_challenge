@@ -12,7 +12,8 @@ from sklearn.ensemble import AdaBoostRegressor, RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.svm import SVR
 import xgboost
-from sklearn.metrics import mean_absolute_error, mean_squared_error 
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+
 import numpy as np
 import pandas as pd
 import sklearn.gaussian_process as gp
@@ -42,10 +43,7 @@ def choose_best_default_model(X, y):
               AdaBoostRegressor(base_estimator=DecisionTreeRegressor(),
                                 learning_rate=0.5),
               SVR(),
-              gp.GaussianProcessRegressor(kernel=gp.kernels.ConstantKernel(1.0,
-                               (1e-1, 1e3))*gp.kernels.RBF(10.0, (1e-3, 1e3)),
-                                          n_restarts_optimizer=10, alpha=0.1,
-                                          normalize_y=True)]
+              ]
     results = []
     fold = KFold(n_splits=10, shuffle=True)
     
@@ -62,7 +60,8 @@ def choose_best_default_model(X, y):
             absolute.append(a)
         
         results.append([np.mean(square), np.mean(absolute)])
-    np.save("./data_for_models/results.npy", np.array(results))
+
+    return results
     
     
 def load_data_numpy(name_x="./data_for_models/X.npy",
@@ -75,4 +74,6 @@ def load_data_numpy(name_x="./data_for_models/X.npy",
 
 if __name__ == "__main__":
     X, y, X_test = load_data_numpy()
-    choose_best_default_model(X, y)
+    results = choose_best_default_model(X, y)
+    print(results)
+    

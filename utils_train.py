@@ -20,7 +20,7 @@ import pickle
 from time import sleep
 from utils_reader import create_partial
 from tqdm import tqdm
-
+import sys
 
 OFFICIAL_ATTR_2 = [['DATA', 'Tm'],
                    ['DATA', 'Tm'],
@@ -100,7 +100,7 @@ def classify_one_idx(X):
     y = X['T_MEAN'].values
 
     results = []
-    fold = KFold(n_splits=5, shuffle=True)
+    fold = KFold(n_splits=3, shuffle=True)
 
     for train_idx, test_idx in fold.split(X_t):
         X_train, X_test = X_t[train_idx], X_t[test_idx]
@@ -120,7 +120,8 @@ def classify_one_idx(X):
     return results, linear.coef_, linear.intercept_
 
 
-def give_n_points_n_weights(df, n_points=1, identifier='idx', method="mean"):
+def give_n_points_n_weights(df, n_points=102, identifier='idx', method="mean",
+                            super_method='solo'):
 
     # 0 for values of mse out of bag, 1 for coefs and 2 for intercept
     list_mins = [[], [], []]
@@ -131,22 +132,36 @@ def give_n_points_n_weights(df, n_points=1, identifier='idx', method="mean"):
 
         X = df[df[identifier] == i]
         errors, coefs, intercepts = classify_one_idx(X)
+
         if method == "mean":
             values = np.mean(errors)
         elif method == "std":
             values = np.std(errors)
+
         for j, h in enumerate(list([values, coefs, intercepts])):
             list_mins[j].append(h)
 
-        new_points = list_ids[np.argpartition(list_mins[0],
-                                              -n_points)[-n_points:]]
+    if super_method == "solo":
+        new_points = [list_ids[np.argmax(list_mins[0])]]
+
+    elif super_method == "covar":
+        new_points = np.argpartition(list_mins[0],
+                                     -n_points)[-n_points:]
+        df_selected = df.loc[:, ['day', 'idx', 'T_MEAN']]
+        pivot = df_selected.pivot_table(index='day', columns='idx').values
+        rr = 1 - np.corrcoef(pivot.values).mean(axis=1)
+        rr_selected = rr[new_points]
+        errors = list_mins[0][new_points]
+        np.save("./errors_try.npy", np.array(errors))
+        np.save("./rr.npy", np.array(rr_selected))
 
     return new_points, list_mins[1], list_mins[2], list_ids, list_mins[0]
 
 
 def train_2nd_task_min_error(include_distance=False,
                              official_attr=OFFICIAL_ATTR_2,
-                             method="mean"):
+                             method="mean",
+                             super_method="solo"):
 
     full_real = read_real_files()
     official_stations_daily = read_official_stations()
@@ -162,9 +177,11 @@ def train_2nd_task_min_error(include_distance=False,
 
     df_full.drop(columns=[i for i in
                           df_full.columns if 'DATA' in i], inplace=True)
+    df_full.fillna(method='ffill', inplace=True)
 
     new_points, coefs, intercepts, list_ids, errors = give_n_points_n_weights(df_full,
-                                                                              method=method)
+                                                                              method=method,
+                                                                              super_method=super_method)
 
     full_coef_list = []
     full_intercept_list = []
@@ -189,7 +206,8 @@ def train_2nd_task_min_error(include_distance=False,
                               range(count, count+1)], inplace=True)
 
         new_points, coefs, intercepts, list_ids, errors = give_n_points_n_weights(df_full,
-                                                                                  method=method)
+                                                                                  method=method,
+                                                                                  super_method=super_method)
         points.append(new_points)
         error_list.append(errors)
         if count in list([1, 2, 5, 10]):
@@ -197,7 +215,7 @@ def train_2nd_task_min_error(include_distance=False,
             full_intercept_list.append(intercepts)
             full_id_list.append(list_ids)
 
-        sleep(60)
+        sleep(240)
 
     dump_pickle(path.join(ROOT, "coefs.pkl"), full_coef_list)
     dump_pickle(path.join(ROOT, "intercepts.pkl"), full_intercept_list)

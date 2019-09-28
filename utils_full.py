@@ -14,16 +14,24 @@ import numpy as np
 from utils_train import give_pred_format
 from bestmodel import default_model_predict
 from sklearn.linear_model import Lasso
+from sklearn.feature_selection import SelectKBest, f_regression
 
 
 # BEST: lasso with T and day alpha =0.1
 # correlation threshold +- 0.3
 
+#OFFICIAL_ATTR = [['DATA', 'Tm', 'ESTACIO'],
+#                 ['DATA', 'Tm', 'ESTACIO'],
+#                 ['DATA', 'Tm',
+#                  'ESTACIO'],
+#                 ['DATA', 'Tm', 
+#                  'ESTACIO']]
+
 OFFICIAL_ATTR = [['DATA', 'Tm', 'ESTACIO'],
                  ['DATA', 'Tm', 'ESTACIO'],
                  ['DATA', 'Tm',
                   'ESTACIO'],
-                 ['DATA', 'Tm', 
+                 ['DATA', 'Tm',
                   'ESTACIO']]
 
 OFFICIAL_ATTR_HOURLY = [['DATA', 'T', 'TX', 'TN', 'HR', 'HRN', 'HRX', 'PPT',
@@ -110,7 +118,8 @@ def add_df(entry, attr, other="official"):
 
 
 def first_frame(mode="train", with_pca=False, imputer=None, scaler=None,
-                pca=None, threshold=0.8, features = None):
+                pca=None, threshold=0.8, features=None, corr=True,
+                kbest=None, selector=None):
 
     if mode == "train":
         real = full_real()
@@ -127,22 +136,33 @@ def first_frame(mode="train", with_pca=False, imputer=None, scaler=None,
     drop_function(df, "DATA")
 
     if mode == "train":
-        corr = df.corr()['T_MEAN']
-        features = [j for i, j in zip(corr, corr.index) if i > 0.8]
-        df = df.loc[:, features + ['day']]
+        if corr:
+            corr = df.corr()['T_MEAN']
+            features = [j for i, j in zip(corr, corr.index) if i > 0.8]
+            df = df.loc[:, features + ['day']]
+        else:
+            features = None
         if with_pca:
             df, pca, imputer, scaler = result_pca(df, threshold=threshold)
+            y = df['T_MEAN']
+            X = df.loc[:, df.columns[(df.columns != 'T_MEAN') &
+                                     (df.columns != 'day')]]
         else:
             y = df['T_MEAN']
             X = df.loc[:, df.columns[(df.columns != 'T_MEAN') &
                                      (df.columns != 'day')]]
             X, imputer, scaler = input_scale(X)
             pca = None
-        return X, y, pca, imputer, scaler, features
+        if kbest:
+            selector = SelectKBest(f_regression, k=5)
+            X = selector.fit_transform(X, y)
+        else:
+            selector = None
+        return X, y, pca, imputer, scaler, features, selector
     else:
-        df = df.loc[:, features + ['day']]
-        if with_pca:
+        if corr:
             df = df.loc[:, features + ['day']]
+        if with_pca:
             df, pca, imputer, scaler = result_pca(df, scaler=scaler,
                                                   imputer=imputer, pca=pca,
                                                   threshold=threshold)
@@ -161,15 +181,10 @@ def first_frame(mode="train", with_pca=False, imputer=None, scaler=None,
                                      (df.columns != 'days')]]
             X = imputer.transform(X)
             X = scaler.transform(X)
+        if kbest:
+            X = selector.transform(X)
         return X, None, df['day']
 
-
-def second_frame(mode='train'):
-
-    if mode == "train":
-        real = full_real(full=1)
-    else:
-        real = dates_f_prediction(full=1)
 
 def save_data_numpy(X, y=None, direc="./data_for_models/",
                      name_X="X.npy",
@@ -185,18 +200,20 @@ def save_data_numpy(X, y=None, direc="./data_for_models/",
 if __name__ == "__main__":
     threshold = 0.97
     # retorna X=X_train, y=y_train
-    X, y, pca, imputer, scaler, features = first_frame(threshold=threshold)
+    X, y, pca, imputer, scaler, features, selector = first_frame(threshold=threshold,
+                                                       corr=False, kbest=False)
     #aquest es Xpred
     X_pred, _, days = first_frame(mode="predict", imputer=imputer,
                                   scaler=scaler, pca=pca,
-                                  threshold=threshold, features=features)
+                                  threshold=threshold, features=features,
+                                  corr=False, kbest=False, selector=selector)
     
     save_data_numpy(X, y, name_y = "y.npy")
     save_data_numpy(X_pred, name_X="X_test.npy")
-#    y_pred = default_model_predict(Lasso(alpha=0.1), X, y, X_pred)
+    y_pred = default_model_predict(LinearRegression(), X, y, X_pred)
 ##    # prediu ambn lgbm
 #
 ##    #dona la predicció amb format d'entrega
-#    give_pred_format(X_pred, y_pred, "./submission/lasso.csv", days)
+    give_pred_format(X_pred, y_pred, "./submission/linear.csv", days)
 #    
     

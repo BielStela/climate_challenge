@@ -252,7 +252,7 @@ def download_files(direc="./climateChallengeData/"):
 
         save_sample(give_request(url_sample1), "S1.csv", direc)
         save_sample(give_request(url_sample2), "S2.csv", direc)
-
+        save_sample
     else:
         print("Data already downloaded")
 
