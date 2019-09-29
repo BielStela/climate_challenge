@@ -22,7 +22,7 @@ def default_model_test(model, X_train, y_train, X_test, y_test):
     mod = model
     mod.fit(X_train, y_train)
     y_pred = mod.predict(X_test)
-    return mean_squared_error(y_test, y_pred), mean_absolute_error(y_test, y_pred)
+    return mean_squared_error(y_test, y_pred), np.sum(np.abs(y_test-y_pred))
 
 def default_model_predict(model, X_train, y_train, X_test):
     mod = model
@@ -48,7 +48,6 @@ def choose_best_default_model(X, y):
     fold = KFold(n_splits=10, shuffle=True)
     
     for i, j in enumerate(models):
-        square = []
         absolute = []
         for train_idx, test_idx in fold.split(X):
             X_train, X_test = X[train_idx], X[test_idx]
@@ -56,10 +55,9 @@ def choose_best_default_model(X, y):
         
             s, a = default_model_test(j, X_train, y_train, X_test, y_test)
             
-            square.append(s)
             absolute.append(a)
         
-        results.append([np.mean(square), np.mean(absolute)])
+        results.append([np.sum(absolute)])
 
     return results
     

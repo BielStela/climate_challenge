@@ -130,7 +130,7 @@ def first_frame(mode="train", with_pca=False, imputer=None, scaler=None,
     df['ndays'] = pd.to_datetime(df['day'], format="%Y-%m-%d",
                                  exact=True).dt.dayofyear
     # df = add_df(df, OFFICIAL_ATTR_HOURLY, "hourly")
-    df = add_df(df, [unofficial_attr()], "unofficial")
+    # df = add_df(df, [unofficial_attr()], "unofficial")
 
     drop_function(df, "ESTACIO_")
     drop_function(df, "DATA")
@@ -210,7 +210,7 @@ if __name__ == "__main__":
     
     save_data_numpy(X, y, name_y = "y.npy")
     save_data_numpy(X_pred, name_X="X_test.npy")
-    y_pred = default_model_predict(LinearRegression(), X, y, X_pred)
+    y_pred = default_model_predict(Ridge(alpha=0.1), X, y, X_pred)
 ##    # prediu ambn lgbm
 #
 ##    #dona la predicció amb format d'entrega
