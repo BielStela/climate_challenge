@@ -13,7 +13,7 @@ import pandas as pd
 import numpy as np
 from utils_train import give_pred_format
 from bestmodel import default_model_predict
-from sklearn.linear_model import Lasso
+from sklearn.linear_model import Lasso, Ridge
 from sklearn.feature_selection import SelectKBest, f_regression
 
 
