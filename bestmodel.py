@@ -44,7 +44,7 @@ def choose_best_default_model(X, y):
                                 learning_rate=0.5),
               SVR(),
               ]
-    results = []
+    results = {}
     fold = KFold(n_splits=10, shuffle=True)
     
     for i, j in enumerate(models):
@@ -57,7 +57,7 @@ def choose_best_default_model(X, y):
             
             absolute.append(a)
         
-        results.append([np.mean(absolute)])
+        results[type(j).__name__] = np.sum(absolute)
 
     return results
     
