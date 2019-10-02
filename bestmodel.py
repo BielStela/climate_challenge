@@ -57,7 +57,7 @@ def choose_best_default_model(X, y):
             
             absolute.append(a)
         
-        results.append([np.sum(absolute)])
+        results.append([np.mean(absolute)])
 
     return results
     
