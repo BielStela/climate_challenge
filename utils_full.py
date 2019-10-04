@@ -16,6 +16,7 @@ from bestmodel import default_model_predict
 from sklearn.linear_model import Lasso, Ridge
 from sklearn.feature_selection import SelectKBest, f_regression
 from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
 
 
 # BEST: lasso with T and day alpha =0.1
@@ -190,25 +191,47 @@ def first_frame(mode="train", with_pca=False, imputer=None, scaler=None,
         return X, None, df['day']
 
 
-def second_frame(X, y, model1=Ridge(alpha=0.1),
-                 model2=Ridge(alpha=0.1), days=None, mode='train',
-                 columns=['green_co_3'], scaler=StandardScaler()):
+def generate_2frame():
+    pass
 
-    real = full_real(full=1)
+
+def second_frame(X, y=None, model1=Ridge(alpha=0.1),
+                 model2=Ridge(alpha=0.1), days=None, mode='train',
+                 features=list(['green_co_3']), scaler=StandardScaler(),
+                 imputer=SimpleImputer()):
+
+    if mode == 'train':
+        real = full_real(full=1)
+    else:
+        real = generate_2frame()
+
     extra_data = pd.read_csv("extra_features.csv")
     gridtolatlon = pd.read_csv("./climateChallengeData/grid2latlon.csv")
     extra_data['LAT'], extra_data['LON'] = gridtolatlon['LAT'], gridtolatlon['LON']
     real_full = pd.merge(real, extra_data, on=['LAT', 'LON'])
-    model1.fit(X, y)
-    y_pred = model1.predict(X)
+
+    if mode == 'train':
+        model1.fit(X, y)
+        y_pred = model1.predict(X)
+    else:
+        y_pred = model1.predict(X)
     df_add = pd.DataFrame({'day': days, 'pred': y_pred})
     real = pd.merge(real_full, df_add, on='day')
-    reescaled = scaler.fit_transform(real.loc[:,
-                                              columns.append('pred')])
-    
-    model2.fit(reescaled, real['T_MEAN'])
-    
-    
+
+    if mode == 'train':
+        imputed = imputer.fit_transform(real.loc[:, list(features + ['pred'])])
+        reescaled = scaler.fit_transform(imputed)
+
+        model2.fit(reescaled, real['T_MEAN'])
+    else:
+        imputed = imputer.transform(real.loc[:, list(features + ['pred'])])
+        reescaled = scaler.transform(imputed)
+
+        y_end = model2.predict(reescaled)
+        # TODO: aggregate prediction per day
+    return model1, model2, imputer, scaler
+
+
 def save_data_numpy(X, y=None, direc="./data_for_models/",
                     name_X="X.npy",
                     name_y=None):
@@ -227,6 +250,7 @@ if __name__ == "__main__":
     X, y, pca, imputer, scaler, features, selector, days = first_frame(
             threshold=threshold,
             corr=False, kbest=False)
+    model1, model2, imputer_2, scaler_2 = second_frame(X, y,days=days)
     # aquest es Xpred
     X_pred, _, days = first_frame(mode="predict", imputer=imputer,
                                   scaler=scaler, pca=pca,
