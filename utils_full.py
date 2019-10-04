@@ -15,6 +15,7 @@ from utils_train import give_pred_format
 from bestmodel import default_model_predict
 from sklearn.linear_model import Lasso, Ridge
 from sklearn.feature_selection import SelectKBest, f_regression
+from sklearn.preprocessing import StandardScaler
 
 
 # BEST: lasso with T and day alpha =0.1
@@ -61,9 +62,12 @@ def unofficial_attr():
 
 def full_real(full=0):
     real = read_real_files()
-    real = real.loc[:, ['day', 'T_MEAN']]
+
     if not full:
+        real = real.loc[:, ['day', 'T_MEAN']]
         real = real.groupby("day", as_index=False).agg({"T_MEAN": "mean"})
+    else:
+        real = real.loc[:, ['day', 'T_MEAN', 'LAT', 'LON']]
     return real
 
 
@@ -158,7 +162,7 @@ def first_frame(mode="train", with_pca=False, imputer=None, scaler=None,
             X = selector.fit_transform(X, y)
         else:
             selector = None
-        return X, y, pca, imputer, scaler, features, selector
+        return X, y, pca, imputer, scaler, features, selector, df['day']
     else:
         if corr:
             df = df.loc[:, features + ['day']]
@@ -186,9 +190,28 @@ def first_frame(mode="train", with_pca=False, imputer=None, scaler=None,
         return X, None, df['day']
 
 
+def second_frame(X, y, model1=Ridge(alpha=0.1),
+                 model2=Ridge(alpha=0.1), days=None, mode='train',
+                 columns=['green_co_3'], scaler=StandardScaler()):
+
+    real = full_real(full=1)
+    extra_data = pd.read_csv("extra_features.csv")
+    gridtolatlon = pd.read_csv("./climateChallengeData/grid2latlon.csv")
+    extra_data['LAT'], extra_data['LON'] = gridtolatlon['LAT'], gridtolatlon['LON']
+    real_full = pd.merge(real, extra_data, on=['LAT', 'LON'])
+    model1.fit(X, y)
+    y_pred = model1.predict(X)
+    df_add = pd.DataFrame({'day': days, 'pred': y_pred})
+    real = pd.merge(real_full, df_add, on='day')
+    reescaled = scaler.fit_transform(real.loc[:,
+                                              columns.append('pred')])
+    
+    model2.fit(reescaled, real['T_MEAN'])
+    
+    
 def save_data_numpy(X, y=None, direc="./data_for_models/",
-                     name_X="X.npy",
-                     name_y=None):
+                    name_X="X.npy",
+                    name_y=None):
 
     if not path.exists(direc):
         mkdir(direc)
@@ -196,18 +219,20 @@ def save_data_numpy(X, y=None, direc="./data_for_models/",
     np.save(path.join(direc, name_X), X)
     if name_y is not None:
         np.save(path.join(direc, name_y), y)
-        
+
+
 if __name__ == "__main__":
     threshold = 0.97
     # retorna X=X_train, y=y_train
-    X, y, pca, imputer, scaler, features, selector = first_frame(threshold=threshold,
-                                                       corr=False, kbest=False)
-    #aquest es Xpred
+    X, y, pca, imputer, scaler, features, selector, days = first_frame(
+            threshold=threshold,
+            corr=False, kbest=False)
+    # aquest es Xpred
     X_pred, _, days = first_frame(mode="predict", imputer=imputer,
                                   scaler=scaler, pca=pca,
                                   threshold=threshold, features=features,
                                   corr=False, kbest=False, selector=selector)
-    
+
     save_data_numpy(X, y, name_y = "y.npy")
     save_data_numpy(X_pred, name_X="X_test.npy")
     y_pred = default_model_predict(Ridge(alpha=0.1), X, y, X_pred)
