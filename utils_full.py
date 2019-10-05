@@ -192,7 +192,18 @@ def first_frame(mode="train", with_pca=False, imputer=None, scaler=None,
 
 
 def generate_2frame():
-    pass
+    range_dates = pd.date_range(start='1/1/2016', end='31/12/2016', freq="D")
+    gridtolatlon = pd.read_csv("./climateChallengeData/grid2latlon.csv")
+    number_points = len(gridtolatlon)
+    final_df = pd.DataFrame(columns=['day', 'LAT', 'LON'])
+    for i in range_dates:
+        day = pd.to_datetime(i, format="%Y-%m-%d")
+        day = day.strftime("%Y-%m-%d")
+        days = np.repeat(day, number_points)
+        df = pd.DataFrame({'day': days, 'LAT': gridtolatlon['LAT'],
+                           'LON': gridtolatlon['LON']})
+        final_df = pd.concat([final_df, df], ignore_index=True)
+    return final_df
 
 
 def second_frame(X, y=None, model1=Ridge(alpha=0.1),
@@ -256,11 +267,11 @@ if __name__ == "__main__":
             corr=False, kbest=False)
     model1, model2, imputer_2, scaler_2, pred_2 = second_frame(X, y, days=days)
     # aquest es Xpred
-    X_pred, _, days = first_frame(mode="predict", imputer=imputer,
-                                  scaler=scaler, pca=pca,
-                                  threshold=threshold, features=features,
-                                  corr=False, kbest=False, selector=selector)
-    model1, model2, imputer_2, scaler_2, y_pred = second_frame(X, y,
+#    X_pred, _, days = first_frame(mode="predict", imputer=imputer,
+#                                  scaler=scaler, pca=pca,
+#                                  threshold=threshold, features=features,
+#                                  corr=False, kbest=False, selector=selector)
+    model1, model2, imputer_2, scaler_2, y_pred = second_frame(pred_2, y,
                                                                model1=model1,
                                                                model2=model2,
                                                                days=days,
@@ -272,4 +283,4 @@ if __name__ == "__main__":
     save_data_numpy(X, y, name_y="y.npy")
     save_data_numpy(X_pred, name_X="X_test.npy")
 #    y_pred = default_model_predict(Ridge(alpha=0.1), X, y, X_pred)
-    give_pred_format(X_pred, y_pred, "./submission/linear.csv", days)
+    give_pred_format(X_pred, y_pred, "./submission/linear_2frame.csv", days)
