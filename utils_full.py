@@ -223,13 +223,17 @@ def second_frame(X, y=None, model1=Ridge(alpha=0.1),
         reescaled = scaler.fit_transform(imputed)
 
         model2.fit(reescaled, real['T_MEAN'])
+        y_pred = None
     else:
         imputed = imputer.transform(real.loc[:, list(features + ['pred'])])
         reescaled = scaler.transform(imputed)
 
         y_end = model2.predict(reescaled)
-        # TODO: aggregate prediction per day
-    return model1, model2, imputer, scaler
+        frame_agg = pd.Dataframe({'day': real['day'], 'LAT': real['LAT'],
+                                  'LON': real['LON'], 'y_pred': y_end})
+        end_frame = frame_agg.groupby(by='day').agg({'y_pred': 'mean'})
+        y_pred = end_frame['y_pred']
+    return model1, model2, imputer, scaler, y_pred
 
 
 def save_data_numpy(X, y=None, direc="./data_for_models/",
@@ -250,19 +254,22 @@ if __name__ == "__main__":
     X, y, pca, imputer, scaler, features, selector, days = first_frame(
             threshold=threshold,
             corr=False, kbest=False)
-    model1, model2, imputer_2, scaler_2 = second_frame(X, y,days=days)
+    model1, model2, imputer_2, scaler_2, pred_2 = second_frame(X, y, days=days)
     # aquest es Xpred
     X_pred, _, days = first_frame(mode="predict", imputer=imputer,
                                   scaler=scaler, pca=pca,
                                   threshold=threshold, features=features,
                                   corr=False, kbest=False, selector=selector)
+    model1, model2, imputer_2, scaler_2, y_pred = second_frame(X, y,
+                                                               model1=model1,
+                                                               model2=model2,
+                                                               days=days,
+                                                               mode='test',
+                                                               scaler=scaler_2,
+                                                               imputer=imputer_2
+                                                               )
 
-    save_data_numpy(X, y, name_y = "y.npy")
+    save_data_numpy(X, y, name_y="y.npy")
     save_data_numpy(X_pred, name_X="X_test.npy")
-    y_pred = default_model_predict(Ridge(alpha=0.1), X, y, X_pred)
-##    # prediu ambn lgbm
-#
-##    #dona la predicció amb format d'entrega
+#    y_pred = default_model_predict(Ridge(alpha=0.1), X, y, X_pred)
     give_pred_format(X_pred, y_pred, "./submission/linear.csv", days)
-#    
-    
