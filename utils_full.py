@@ -13,7 +13,7 @@ import pandas as pd
 import numpy as np
 from utils_train import give_pred_format
 from bestmodel import default_model_predict
-from sklearn.linear_model import Lasso, Ridge
+from sklearn.linear_model import Lasso, Ridge, LinearRegression
 from sklearn.feature_selection import SelectKBest, f_regression
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
@@ -88,8 +88,8 @@ def dates_f_prediction(full=0):
                 dates = np.repeat(i, len(grid_points))
                 days = np.repeat(j, len(grid_points))
                 sample_df = pd.DataFrame({'day': dates, 'ndays': days,
-                                          'nx': grid_points['nx'].values,
-                                          'ny': grid_points['ny'].values})
+                                          'LAT': grid_points['LAT'].values,
+                                          'LON': grid_points['LON'].values})
                 final_df.append(sample_df)
         final_df = pd.concat(final_df, ignore_index=True, sort=False)
     else:
@@ -198,17 +198,19 @@ def generate_2frame():
     final_df = pd.DataFrame(columns=['day', 'LAT', 'LON'])
     for i in range_dates:
         day = pd.to_datetime(i, format="%Y-%m-%d")
-        day = day.strftime("%Y-%m-%d")
-        days = np.repeat(day, number_points)
-        df = pd.DataFrame({'day': days, 'LAT': gridtolatlon['LAT'],
-                           'LON': gridtolatlon['LON']})
-        final_df = pd.concat([final_df, df], ignore_index=True)
+        if day.day > 5:
+            day = day.strftime("%Y-%m-%d")
+
+            days = np.repeat(day, number_points)
+            df = pd.DataFrame({'day': days, 'LAT': gridtolatlon['LAT'],
+                               'LON': gridtolatlon['LON']})
+            final_df = pd.concat([final_df, df], ignore_index=True)
     return final_df
 
 
-def second_frame(X, y=None, model1=Ridge(alpha=0.1),
-                 model2=Ridge(alpha=0.1), days=None, mode='train',
-                 features=list(['green_co_3']), scaler=StandardScaler(),
+def second_frame(model2=Ridge(alpha=0.1), mode='train',
+                 features=['green_co_3', 'slope_mean'],
+                 scaler=StandardScaler(),
                  imputer=SimpleImputer()):
 
     if mode == 'train':
@@ -219,32 +221,40 @@ def second_frame(X, y=None, model1=Ridge(alpha=0.1),
     extra_data = pd.read_csv("extra_features.csv")
     gridtolatlon = pd.read_csv("./climateChallengeData/grid2latlon.csv")
     extra_data['LAT'], extra_data['LON'] = gridtolatlon['LAT'], gridtolatlon['LON']
+    extra_data.drop(columns=extra_data.columns[(extra_data.columns != 'LON') &
+                                               (extra_data.columns != 'LAT') &
+                                               (extra_data.columns != features[0]) &
+                                               (extra_data.columns != features[1])
+                                               ], inplace=True)
     real_full = pd.merge(real, extra_data, on=['LAT', 'LON'])
 
+    real = add_df(real_full, OFFICIAL_ATTR)
+    drop_function(real, "ESTACIO_")
+    drop_function(real, "DATA")
+    real['ndays'] = pd.to_datetime(real['day'], format="%Y-%m-%d",
+                                 exact=True).dt.dayofyear
     if mode == 'train':
-        model1.fit(X, y)
-        y_pred = model1.predict(X)
-    else:
-        y_pred = model1.predict(X)
-    df_add = pd.DataFrame({'day': days, 'pred': y_pred})
-    real = pd.merge(real_full, df_add, on='day')
-
-    if mode == 'train':
-        imputed = imputer.fit_transform(real.loc[:, list(features + ['pred'])])
+        imputed = imputer.fit_transform(real.loc[:, real.columns[
+                (real.columns != 'day') & (real.columns != 'LAT') &
+                (real.columns != 'LON') & (real.columns != 'T_MEAN')]])
         reescaled = scaler.fit_transform(imputed)
 
         model2.fit(reescaled, real['T_MEAN'])
         y_pred = None
+        days = None
     else:
-        imputed = imputer.transform(real.loc[:, list(features + ['pred'])])
+        imputed = imputer.transform(real.loc[:, real.columns[
+                (real.columns != 'day') & (real.columns != 'LAT') &
+                (real.columns != 'LON') & (real.columns != 'T_MEAN')]])
         reescaled = scaler.transform(imputed)
 
         y_end = model2.predict(reescaled)
-        frame_agg = pd.Dataframe({'day': real['day'], 'LAT': real['LAT'],
+        frame_agg = pd.DataFrame({'day': real['day'], 'LAT': real['LAT'],
                                   'LON': real['LON'], 'y_pred': y_end})
         end_frame = frame_agg.groupby(by='day').agg({'y_pred': 'mean'})
-        y_pred = end_frame['y_pred']
-    return model1, model2, imputer, scaler, y_pred
+        y_pred = end_frame['y_pred'].values
+        days = end_frame.index
+    return model2, imputer, scaler, y_pred, days
 
 
 def save_data_numpy(X, y=None, direc="./data_for_models/",
@@ -265,22 +275,19 @@ if __name__ == "__main__":
     X, y, pca, imputer, scaler, features, selector, days = first_frame(
             threshold=threshold,
             corr=False, kbest=False)
-    model1, model2, imputer_2, scaler_2, pred_2 = second_frame(X, y, days=days)
-    # aquest es Xpred
-#    X_pred, _, days = first_frame(mode="predict", imputer=imputer,
-#                                  scaler=scaler, pca=pca,
-#                                  threshold=threshold, features=features,
-#                                  corr=False, kbest=False, selector=selector)
-    model1, model2, imputer_2, scaler_2, y_pred = second_frame(pred_2, y,
-                                                               model1=model1,
-                                                               model2=model2,
-                                                               days=days,
-                                                               mode='test',
-                                                               scaler=scaler_2,
-                                                               imputer=imputer_2
-                                                               )
-
+    X_pred, _, days = first_frame(mode="predict", imputer=imputer,
+                                  scaler=scaler, pca=pca,
+                                  threshold=threshold, features=features,
+                                  corr=False, kbest=False, selector=selector)
     save_data_numpy(X, y, name_y="y.npy")
     save_data_numpy(X_pred, name_X="X_test.npy")
-#    y_pred = default_model_predict(Ridge(alpha=0.1), X, y, X_pred)
+    y_pred = default_model_predict(Ridge(alpha=0.1), X, y, X_pred)
+#    model2, imputer_2, scaler_2, pred_2, days = second_frame()
+#    model2, imputer_2, scaler_2, y_pred, days = second_frame(model2=model2,
+#                                                             mode='test',
+#                                                             scaler=scaler_2,
+#                                                             imputer=imputer_2
+#                                                             )
+
+
     give_pred_format(X_pred, y_pred, "./submission/linear_2frame.csv", days)
